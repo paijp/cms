@@ -135,6 +135,35 @@ server {
 }
 ```
 
+## `/cms/` にBasic認証をかける
+
+管理画面はアプリ側に認証を持たないため、nginxのBasic認証で保護するのが最も簡単です。サーバ側の設定変更のみで完結します。
+
+### 1. パスワードファイルを作る
+
+```bash
+# htpasswd がなければ apt install apache2-utils などで導入
+sudo htpasswd -c /etc/nginx/.htpasswd admin
+```
+
+### 2. nginxの `server` ブロックに location を追加
+
+```nginx
+location /cms/ {
+    auth_basic           "CMS Admin";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    try_files $uri $uri/ =404;
+}
+```
+
+API (`/api/articles.php`) にも認証をかける場合は、同じ `auth_basic` ディレクティブを `location ~ \.php$` などに追加してください（管理画面のfetchはブラウザが自動でBasic認証ヘッダを送るため、追加設定なしで動作します）。
+
+### 3. 反映
+
+```bash
+sudo nginx -t && sudo nginx -s reload
+```
+
 ## フロントエンドの構造
 
 `index.html`（閲覧）と `cms/index.html`（管理）はどちらもフレームワークを使わない**バニラJavaScript**で書かれています。
