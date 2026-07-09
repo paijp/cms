@@ -135,9 +135,11 @@ server {
 }
 ```
 
-## `/cms/` にBasic認証をかける
+## 管理画面とAPIをBasic認証で保護する
 
-管理画面はアプリ側に認証を持たないため、nginxのBasic認証で保護するのが最も簡単です。サーバ側の設定変更のみで完結します。
+アプリ側に認証を持たないため、nginxのBasic認証で保護します。サーバ側の設定変更のみで完結します。
+
+⚠️ **`/cms/` だけでなく `/api/articles.php` も必ず保護してください。** API はPOST/DELETEで記事を書き換えられるため、`/cms/` を隠しても API が公開されていれば `curl` から誰でも記事を作成・削除できます。実質の防御ラインは API 側です。
 
 ### 1. パスワードファイルを作る
 
@@ -146,22 +148,42 @@ server {
 sudo htpasswd -c /etc/nginx/.htpasswd admin
 ```
 
-### 2. nginxの `server` ブロックに location を追加
+### 2. nginxの `server` ブロックに設定を追加
 
 ```nginx
+# 管理画面のHTML
 location /cms/ {
     auth_basic           "CMS Admin";
     auth_basic_user_file /etc/nginx/.htpasswd;
     try_files $uri $uri/ =404;
 }
+
+# API本体（こちらが実質の防御）
+location = /api/articles.php {
+    auth_basic           "CMS Admin";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    fastcgi_pass unix:/run/php-fpm/www.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+}
 ```
 
-API (`/api/articles.php`) にも認証をかける場合は、同じ `auth_basic` ディレクティブを `location ~ \.php$` などに追加してください（管理画面のfetchはブラウザが自動でBasic認証ヘッダを送るため、追加設定なしで動作します）。
+管理画面から API を呼ぶ際は、ブラウザが `/cms/` で入力した Basic 認証情報を同一オリジンの `/api/` へも自動で送るため、フロントエンドの変更は不要です。
 
 ### 3. 反映
 
 ```bash
 sudo nginx -t && sudo nginx -s reload
+```
+
+### 補足: データファイルの直接アクセスも塞ぐ
+
+`data/articles/*.json` は nginx から静的ファイルとして直接読めます。閲覧ページのAPI経由の取得と同じ内容なので機密ではありませんが、URLを推測されたくない場合は以下を追加してください。
+
+```nginx
+location /data/ { deny all; }
 ```
 
 ## フロントエンドの構造
