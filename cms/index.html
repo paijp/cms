@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMS 管理画面</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; color: #1a1a1a; background: #f0f2f5; min-height: 100vh; }
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Header */
+header {
+  background: #1a2a3a; color: #fff;
+  padding: 0 2rem; height: 58px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.logo { font-size: 1rem; font-weight: 700; letter-spacing: .03em; }
+.logo span { color: #f0a500; }
+.logo-sub { font-size: .75rem; color: rgba(255,255,255,.5); margin-left: .5rem; }
+.header-actions { display: flex; gap: .6rem; align-items: center; }
+.btn { cursor: pointer; font-family: inherit; border: none; border-radius: 5px; font-weight: 600; transition: background .15s, color .15s; }
+.btn-sm { padding: .35rem .9rem; font-size: .82rem; }
+.btn-new  { background: #27ae60; color: #fff; }
+.btn-new:hover  { background: #1e8449; }
+.btn-back { background: rgba(255,255,255,.15); color: #fff; }
+.btn-back:hover { background: rgba(255,255,255,.25); }
+.btn-view { background: rgba(78,168,222,.25); color: #9dd4f5; font-size: .78rem; }
+.btn-view:hover { background: rgba(78,168,222,.4); }
+
+/* Genre Nav */
+nav.genre-nav {
+  background: #fff; border-bottom: 1px solid #dde2ea;
+  display: flex; overflow-x: auto; padding: 0 2rem;
+}
+nav.genre-nav button {
+  padding: .85rem 1.3rem; border: none; background: none; cursor: pointer;
+  font-size: .9rem; color: #555; white-space: nowrap;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+nav.genre-nav button.active { color: #1a2a3a; font-weight: 700; border-bottom-color: #f0a500; }
+nav.genre-nav button:hover:not(.active) { color: #1a2a3a; }
+
+/* Main */
+main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
+
+/* Article List */
+.article-list { display: flex; flex-direction: column; gap: .85rem; }
+.article-card {
+  background: #fff; border-radius: 8px; border: 1px solid #dde2ea;
+  padding: 1.1rem 1.4rem; display: flex; align-items: center; gap: 1rem;
+  cursor: pointer; transition: box-shadow .15s;
+}
+.article-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.1); }
+.card-body { flex: 1; min-width: 0; }
+.card-meta { font-size: .75rem; color: #888; margin-bottom: .35rem; }
+.card-title { font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-preview { font-size: .85rem; color: #555; margin-top: .35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+.btn-edit-card { padding: .3rem .8rem; font-size: .8rem; background: #eaf4fd; color: #1c6fa8; border: 1px solid #b8d9f0; border-radius: 4px; cursor: pointer; }
+.btn-edit-card:hover { background: #cde6f8; }
+
+/* Editor */
+.editor { background: #fff; border-radius: 8px; border: 1px solid #dde2ea; padding: 2rem 2.5rem; }
+.editor h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.5rem; color: #1a2a3a; }
+.form-row { margin-bottom: 1.2rem; }
+.form-row label { display: block; font-size: .83rem; font-weight: 600; color: #444; margin-bottom: .38rem; }
+.form-row input, .form-row select, .form-row textarea {
+  width: 100%; padding: .58rem .82rem;
+  border: 1px solid #cdd3da; border-radius: 5px;
+  font-size: .93rem; font-family: inherit; color: #1a1a1a;
+}
+.form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+  outline: none; border-color: #4ea8de; box-shadow: 0 0 0 3px rgba(78,168,222,.15);
+}
+
+/* Block Editor */
+.blocks-editor { margin-top: 1.5rem; }
+.blocks-editor-label { font-size: .83rem; font-weight: 600; color: #444; margin-bottom: .7rem; }
+.block-item {
+  border: 1px solid #dde2ea; border-radius: 6px;
+  padding: .9rem 1rem; margin-bottom: .75rem; background: #fafbfc;
+}
+.block-item-header { display: flex; align-items: center; gap: .55rem; margin-bottom: .65rem; }
+.block-type-badge { font-size: .73rem; font-weight: 700; padding: .18rem .55rem; border-radius: 99px; background: #fef3d0; color: #8a5c00; }
+.block-item-actions { margin-left: auto; display: flex; gap: .35rem; }
+.btn-icon { border: none; background: none; font-size: .95rem; color: #999; padding: .18rem .32rem; border-radius: 4px; cursor: pointer; transition: background .1s, color .1s; }
+.btn-icon:hover { background: #eee; color: #c0392b; }
+.btn-icon.move:hover { color: #1a2a3a; }
+.block-item textarea, .block-item input[type=text] {
+  width: 100%; padding: .48rem .7rem;
+  border: 1px solid #cdd3da; border-radius: 4px;
+  font-size: .88rem; font-family: inherit; resize: vertical;
+}
+.block-item textarea:focus, .block-item input[type=text]:focus { outline: none; border-color: #4ea8de; }
+.add-block-row { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: .2rem; }
+.btn-add-block {
+  padding: .42rem .95rem; border-radius: 5px;
+  border: 1px dashed #f0a500; background: #fffbf0;
+  color: #7a5500; font-size: .83rem; font-weight: 600; cursor: pointer; transition: background .15s;
+}
+.btn-add-block:hover { background: #fdefc0; }
+.img-preview { max-width: 100%; max-height: 180px; border-radius: 4px; margin-top: .4rem; display: block; }
+
+/* Editor Actions */
+.editor-actions { display: flex; gap: .7rem; margin-top: 1.7rem; flex-wrap: wrap; }
+.btn-save { padding: .58rem 1.5rem; background: #1a2a3a; color: #fff; border: none; border-radius: 5px; font-size: .93rem; font-weight: 600; cursor: pointer; }
+.btn-save:hover { background: #0e1c2b; }
+.btn-save:disabled { background: #888; cursor: not-allowed; }
+.btn-delete { padding: .58rem 1.2rem; background: none; color: #c0392b; border: 1px solid #c0392b; border-radius: 5px; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.btn-delete:hover { background: #c0392b; color: #fff; }
+.btn-cancel { padding: .58rem 1.2rem; background: none; color: #555; border: 1px solid #ccc; border-radius: 5px; font-size: .88rem; cursor: pointer; }
+.btn-cancel:hover { background: #f0f0f0; }
+
+/* Misc */
+.empty { text-align: center; color: #aaa; padding: 3rem 0; }
+.loading { text-align: center; color: #888; padding: 2rem 0; }
+#toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: #1a2a3a; color: #fff;
+  padding: .72rem 1.4rem; border-radius: 6px; font-size: .88rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.2); opacity: 0; pointer-events: none;
+  transition: opacity .25s; z-index: 999;
+}
+#toast.show { opacity: 1; }
+footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; font-size: .78rem; padding: 1.1rem; margin-top: auto; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <span class="logo">Sample<span>Tech</span></span>
+      <span class="logo-sub">CMS 管理画面</span>
+    </div>
+    <div class="header-actions" id="headerActions"></div>
+  </header>
+  <nav class="genre-nav" id="genreNav"></nav>
+  <main id="main"></main>
+  <footer>SampleTech CMS — 管理者専用ページ</footer>
+</div>
+<div id="toast"></div>
+
+<script>
+const API = '/api/articles.php';
+const VIEW_BASE = '/';
+const GENRES = [
+  { key: 'news',    label: 'お知らせ' },
+  { key: 'product', label: '製品情報' },
+  { key: 'faq',     label: 'よくある質問' },
+  { key: 'about',   label: '企業情報' },
+];
+const BLOCK_TYPES = [
+  { type: 'heading', label: '見出し' },
+  { type: 'text',    label: '文章' },
+  { type: 'image',   label: '画像' },
+];
+
+let state = { view: 'list', genre: 'news', articles: [], current: null, editing: null, loading: false };
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function api(method, params = {}, body = null) {
+  const qs = new URLSearchParams(params).toString();
+  const url = qs ? `${API}?${qs}` : API;
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  return (await fetch(url, opts)).json();
+}
+function genId(genre) { return genre + '-' + Date.now(); }
+
+function render() { renderGenreNav(); renderHeader(); renderMain(); }
+
+function renderGenreNav() {
+  const nav = document.getElementById('genreNav');
+  nav.innerHTML = GENRES.map(g =>
+    `<button class="${g.key===state.genre?'active':''}" data-g="${g.key}">${g.label}</button>`
+  ).join('');
+  nav.querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => { state.genre = b.dataset.g; gotoList(); })
+  );
+}
+
+function renderHeader() {
+  const el = document.getElementById('headerActions');
+  const viewLink = `<a href="${VIEW_BASE}" target="_blank"><button class="btn btn-sm btn-view">閲覧ページ ↗</button></a>`;
+  if (state.view === 'list') {
+    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
+    document.getElementById('btnNew').onclick = () => gotoEditor(null);
+  } else {
+    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-back" id="btnBack">← 一覧へ</button>`;
+    document.getElementById('btnBack').onclick = () => gotoList();
+  }
+}
+
+function renderMain() {
+  const main = document.getElementById('main');
+  if (state.loading) { main.innerHTML = '<div class="loading">読み込み中...</div>'; return; }
+  if (state.view === 'list')   renderList(main);
+  if (state.view === 'editor') renderEditor(main);
+}
+
+/* ---- List ---- */
+async function gotoList() {
+  state.view = 'list'; state.current = null; state.editing = null; state.loading = true; render();
+  state.articles = await api('GET', { genre: state.genre });
+  state.loading = false; render();
+}
+
+function renderList(main) {
+  const genreLabel = GENRES.find(g => g.key === state.genre)?.label || '';
+  if (!state.articles.length) { main.innerHTML = '<div class="empty">記事がありません。「＋ 新規記事」から作成してください。</div>'; return; }
+  main.innerHTML = '<div class="article-list" id="articleList"></div>';
+  const list = document.getElementById('articleList');
+  state.articles.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'article-card';
+    const b = a.blocks?.[0];
+    let preview = '';
+    if (b?.type === 'heading') preview = b.content || '';
+    else if (b?.type === 'text') { const t = (b.content||'').replace(/\n/g,' '); preview = t.length>80?t.slice(0,80)+'…':t; }
+    else if (b?.type === 'image') preview = '📷 画像';
+    card.innerHTML = `
+      <div class="card-body">
+        <div class="card-meta">${genreLabel} ・ ${fmtDate(a.created_at)} 更新: ${fmtDate(a.updated_at)}</div>
+        <div class="card-title">${esc(a.title)}</div>
+        ${preview ? `<div class="card-preview">${esc(preview)}</div>` : ''}
+      </div>
+      <div class="card-actions">
+        <button class="btn-edit-card">✎ 編集</button>
+      </div>`;
+    card.querySelector('.btn-edit-card').onclick = async (e) => {
+      e.stopPropagation();
+      const full = await api('GET', { id: a.id });
+      gotoEditor(full);
+    };
+    card.onclick = async () => {
+      const full = await api('GET', { id: a.id });
+      gotoEditor(full);
+    };
+    list.appendChild(card);
+  });
+}
+
+/* ---- Editor ---- */
+function gotoEditor(article) {
+  state.editing = article
+    ? JSON.parse(JSON.stringify(article))
+    : { id: genId(state.genre), genre: state.genre, title: '', blocks: [] };
+  state.view = 'editor'; render();
+}
+
+function renderEditor(main) {
+  const e = state.editing;
+  const isNew = !e.created_at;
+  main.innerHTML = `
+    <div class="editor">
+      <h2>${isNew ? '新規記事の作成' : '記事を編集'}</h2>
+      <div class="form-row">
+        <label>ジャンル</label>
+        <select id="eGenre">${GENRES.map(g=>`<option value="${g.key}"${g.key===e.genre?' selected':''}>${g.label}</option>`).join('')}</select>
+      </div>
+      <div class="form-row">
+        <label>タイトル</label>
+        <input type="text" id="eTitle" value="${esc(e.title)}" placeholder="記事のタイトルを入力">
+      </div>
+      <div class="blocks-editor">
+        <div class="blocks-editor-label">ブロック</div>
+        <div id="blocksContainer"></div>
+        <div class="add-block-row">
+          ${BLOCK_TYPES.map(bt=>`<button class="btn-add-block" data-btype="${bt.type}">＋ ${bt.label}</button>`).join('')}
+        </div>
+      </div>
+      <div class="editor-actions">
+        <button class="btn-save" id="btnSave">保存する</button>
+        ${!isNew ? `<button class="btn-delete" id="btnDelete">削除する</button>` : ''}
+        <button class="btn-cancel" id="btnCancel">キャンセル</button>
+      </div>
+    </div>`;
+
+  renderBlocksEditor();
+  document.getElementById('eGenre').onchange = ev => { e.genre = ev.target.value; };
+  document.getElementById('eTitle').oninput  = ev => { e.title = ev.target.value; };
+  document.getElementById('btnSave').onclick   = saveArticle;
+  document.getElementById('btnCancel').onclick = () => gotoList();
+  const btnDel = document.getElementById('btnDelete');
+  if (btnDel) btnDel.onclick = deleteArticle;
+  document.querySelectorAll('.btn-add-block').forEach(b =>
+    b.addEventListener('click', () => addBlock(b.dataset.btype))
+  );
+}
+
+function renderBlocksEditor() {
+  const container = document.getElementById('blocksContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  (state.editing.blocks||[]).forEach((block, idx) =>
+    container.appendChild(buildBlockEditor(block, idx))
+  );
+}
+
+function buildBlockEditor(block, idx) {
+  const e = state.editing;
+  const typeLabel = BLOCK_TYPES.find(b => b.type === block.type)?.label || block.type;
+  const div = document.createElement('div');
+  div.className = 'block-item';
+  div.innerHTML = `
+    <div class="block-item-header">
+      <span class="block-type-badge">${typeLabel}</span>
+      <div class="block-item-actions">
+        <button class="btn-icon move" data-dir="up" data-idx="${idx}" title="上へ">↑</button>
+        <button class="btn-icon move" data-dir="down" data-idx="${idx}" title="下へ">↓</button>
+        <button class="btn-icon" data-del="${idx}" title="削除">✕</button>
+      </div>
+    </div>
+    <div id="bce-${idx}"></div>`;
+
+  const bce = div.querySelector(`#bce-${idx}`);
+  if (block.type === 'heading') {
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = '見出しテキストを入力'; inp.value = block.content||'';
+    inp.oninput = ev => { e.blocks[idx].content = ev.target.value; };
+    bce.appendChild(inp);
+  } else if (block.type === 'text') {
+    const ta = document.createElement('textarea');
+    ta.rows = 5; ta.placeholder = '本文を入力（改行も反映されます）'; ta.value = block.content||'';
+    ta.oninput = ev => { e.blocks[idx].content = ev.target.value; };
+    bce.appendChild(ta);
+  } else if (block.type === 'image') {
+    const urlInp = document.createElement('input');
+    urlInp.type = 'text'; urlInp.placeholder = '画像URL'; urlInp.value = block.src||'';
+    urlInp.oninput = ev => { e.blocks[idx].src = ev.target.value; refreshImgPreview(bce, idx); };
+    const capInp = document.createElement('input');
+    capInp.type = 'text'; capInp.placeholder = 'キャプション（省略可）'; capInp.value = block.caption||'';
+    capInp.style.marginTop = '.4rem';
+    capInp.oninput = ev => { e.blocks[idx].caption = ev.target.value; };
+    bce.appendChild(urlInp); bce.appendChild(capInp);
+    if (block.src) {
+      const img = document.createElement('img');
+      img.src = block.src; img.className = 'img-preview';
+      bce.appendChild(img);
+    }
+  }
+
+  div.querySelectorAll('.btn-icon[data-dir]').forEach(b => {
+    b.onclick = () => {
+      const i = parseInt(b.dataset.idx), d = b.dataset.dir;
+      if (d==='up' && i>0) [e.blocks[i-1],e.blocks[i]]=[e.blocks[i],e.blocks[i-1]];
+      else if (d==='down' && i<e.blocks.length-1) [e.blocks[i],e.blocks[i+1]]=[e.blocks[i+1],e.blocks[i]];
+      renderBlocksEditor();
+    };
+  });
+  div.querySelector('.btn-icon[data-del]').onclick = () => {
+    e.blocks.splice(idx, 1); renderBlocksEditor();
+  };
+  return div;
+}
+
+function refreshImgPreview(bce, idx) {
+  const src = state.editing.blocks[idx].src;
+  let img = bce.querySelector('.img-preview');
+  if (src) {
+    if (!img) { img = document.createElement('img'); img.className = 'img-preview'; bce.appendChild(img); }
+    img.src = src;
+  } else if (img) { img.remove(); }
+}
+
+function addBlock(type) {
+  const block = { type };
+  if (type==='heading') block.content='';
+  if (type==='text')    block.content='';
+  if (type==='image')   { block.src=''; block.caption=''; }
+  state.editing.blocks.push(block);
+  renderBlocksEditor();
+  document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function saveArticle() {
+  const e = state.editing;
+  if (!e.title.trim()) { showToast('タイトルを入力してください'); return; }
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    await api('POST', {}, e);
+    showToast('保存しました');
+    gotoList();
+  } catch {
+    showToast('保存に失敗しました');
+    btn.disabled = false; btn.textContent = '保存する';
+  }
+}
+
+async function deleteArticle() {
+  if (!confirm('この記事を削除しますか？')) return;
+  await api('DELETE', { id: state.editing.id });
+  showToast('削除しました');
+  gotoList();
+}
+
+gotoList();
+</script>
+</body>
+</html>
