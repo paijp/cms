@@ -11,6 +11,8 @@
  *        ※閲覧は管理者ログイン中なら下書き版、未ログインなら公開版
  * GET    ?site=1           -> サイト情報（サイト名・ジャンル）※公開
  * GET    ?diff=1           -> 下書きと公開版のテキスト差分 ※管理者
+ * GET    ?export=1         -> 公開版・下書き全記事をまとめたJSONダウンロード ※管理者
+ * GET    ?include_hidden=1 -> 一覧/詳細に非表示記事も含める ※管理者
  * POST                     -> 記事作成・更新（下書きへ） ※管理者
  * POST   ?publish=1        -> 下書きを公開版へ反映 ※管理者
  * POST   ?reorder=1        -> 記事の並び順を保存 body: {"ids": [...]} ※管理者
@@ -26,6 +28,8 @@ $DRAFT_DIR = rtrim($cfg['drafts_dir'], '/') . '/';
 if (!is_dir($DRAFT_DIR)) @mkdir($DRAFT_DIR, 0700, true);
 $IS_ADMIN = cms_is_admin();
 $READ_DIR = $IS_ADMIN ? $DRAFT_DIR : $PUB_DIR;
+// 一覧/詳細で非表示記事を含めるのは管理者かつ include_hidden 指定時のみ
+$SHOW_HIDDEN = $IS_ADMIN && isset($_GET['include_hidden']);
 
 function respond($data, $status = 200) {
     http_response_code($status);
@@ -162,13 +166,30 @@ if ($method === 'GET') {
         require_admin();
         respond(['diff' => draft_diff($PUB_DIR, $DRAFT_DIR)]);
     }
+    if (isset($_GET['export'])) {
+        require_admin();
+        header('Content-Type: application/json; charset=utf-8');
+        header('Content-Disposition: attachment; filename="cms-export-' . date('Ymd-His') . '.json"');
+        $dump = function ($dir) {
+            $out = [];
+            foreach (glob($dir . '*.json') as $f) $out[] = json_decode(file_get_contents($f), true);
+            return $out;
+        };
+        echo json_encode([
+            'exported_at' => date('c'),
+            'site'        => ['site_name' => $cfg['site_name'], 'genres' => $cfg['genres']],
+            'articles'    => $dump($PUB_DIR),
+            'drafts'      => $dump($DRAFT_DIR),
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        exit;
+    }
     if (isset($_GET['id'])) {
         $a = load_article($READ_DIR, $_GET['id']);
         if (!$a) respond(['error' => 'Not found'], 404);
-        if (!$IS_ADMIN && !empty($a['hidden'])) respond(['error' => 'Not found'], 404);
+        if (!$SHOW_HIDDEN && !empty($a['hidden'])) respond(['error' => 'Not found'], 404);
         respond($a);
     }
-    respond(list_articles($READ_DIR, $_GET['genre'] ?? null, $IS_ADMIN));
+    respond(list_articles($READ_DIR, $_GET['genre'] ?? null, $SHOW_HIDDEN));
 }
 
 if ($method === 'POST') {

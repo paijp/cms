@@ -283,7 +283,7 @@ function renderHeader() {
   const el = document.getElementById('headerActions');
   const viewLink = `<a href="${VIEW_BASE}" target="_blank"><button class="btn btn-sm btn-view">プレビュー ↗</button></a>`;
   if (state.view === 'list') {
-    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
+    el.innerHTML = `${viewLink} <a href="${API}?export=1" class="btn btn-sm btn-view" style="text-decoration:none;padding:.35rem .9rem;display:inline-block">⤓ エクスポート</a> <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
     document.getElementById('btnNew').onclick = () => gotoEditor(null);
     document.getElementById('btnPublish').onclick = openPublishModal;
   } else {
@@ -328,7 +328,7 @@ document.getElementById('btnModalPublish').onclick = async () => {
 /* ---- List ---- */
 async function gotoList(noPush) {
   state.view = 'list'; state.current = null; state.editing = null; state.loading = true; render();
-  state.articles = await api('GET', { genre: state.genre });
+  state.articles = await api('GET', { genre: state.genre, include_hidden: 1 });
   state.loading = false; render();
   if (!noPush) pushUrl(false);
 }
@@ -383,11 +383,11 @@ function renderList(main) {
     card.querySelector('.btn-dup').onclick = (e) => { e.stopPropagation(); duplicateArticle(a.id); };
     card.querySelector('.btn-edit-card:not(.btn-dup)').onclick = async (e) => {
       e.stopPropagation();
-      const full = await api('GET', { id: a.id });
+      const full = await api('GET', { id: a.id, include_hidden: 1 });
       gotoEditor(full);
     };
     card.onclick = async () => {
-      const full = await api('GET', { id: a.id });
+      const full = await api('GET', { id: a.id, include_hidden: 1 });
       gotoEditor(full);
     };
     list.appendChild(card);
