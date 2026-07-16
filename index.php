@@ -1,9 +1,15 @@
+<?php
+require __DIR__ . '/api/lib.php';
+$cfg = cms_config();
+$isAdmin = cms_session_valid();
+$siteName = htmlspecialchars($cfg['site_name'], ENT_QUOTES);
+?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>株式会社サンプルテクノロジー</title>
+<title><?= $siteName ?></title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; color: #1a1a1a; background: #f7f8fa; min-height: 100vh; }
@@ -18,13 +24,15 @@ header {
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .03em; cursor: pointer; }
-.logo span { color: #4ea8de; }
 .btn-sm {
   padding: .35rem .9rem; border-radius: 4px; font-size: .82rem;
   font-weight: 600; border: none; cursor: pointer; transition: background .15s;
 }
 .btn-back { background: rgba(255,255,255,.15); color: #fff; }
 .btn-back:hover { background: rgba(255,255,255,.25); }
+
+/* Preview banner (管理者ログイン中) */
+.preview-banner { background: #f0a500; color: #1a2a3a; text-align: center; font-size: .8rem; font-weight: 600; padding: .35rem; }
 
 /* Genre Nav */
 nav.genre-nav {
@@ -59,7 +67,8 @@ main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
 .block { width: 100%; margin-bottom: 1.25rem; }
 .block:last-child { margin-bottom: 0; }
 .block-heading h2 { font-size: 1.35rem; font-weight: 700; color: #1c3557; padding-bottom: .5rem; border-bottom: 3px solid #4ea8de; }
-.block-text p { font-size: .95rem; line-height: 1.85; color: #333; white-space: pre-wrap; }
+.block-text .md-body { font-size: .95rem; line-height: 1.85; color: #333; }
+.block-table { font-size: .95rem; overflow-x: auto; }
 .block-image img { width: 100%; max-height: 480px; object-fit: cover; border-radius: 6px; display: block; }
 .block-image .img-caption { font-size: .8rem; color: #888; margin-top: .35rem; text-align: center; }
 
@@ -76,32 +85,23 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 <body>
 <div id="app">
   <header>
-    <div class="logo" id="logoBtn">Sample<span>Tech</span></div>
+    <div class="logo" id="logoBtn"><?= $siteName ?></div>
     <div id="headerActions"></div>
   </header>
+<?php if ($isAdmin): ?>
+  <div class="preview-banner">プレビュー版（下書き）を表示中 — 公開するには管理画面の「公開」を押してください</div>
+<?php endif; ?>
   <nav class="genre-nav" id="genreNav"></nav>
   <main id="main"></main>
-  <footer>© 2025 株式会社サンプルテクノロジー</footer>
+  <footer><?= htmlspecialchars($cfg['copyright'], ENT_QUOTES) ?></footer>
 </div>
+<script src="/assets/cms-render.js"></script>
 <script>
 const API = '/api/articles.php';
-const GENRES = [
-  { key: 'news',    label: 'お知らせ' },
-  { key: 'product', label: '製品情報' },
-  { key: 'faq',     label: 'よくある質問' },
-  { key: 'about',   label: '企業情報' },
-];
+const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
 
-let state = { view: 'list', genre: 'news', articles: [], current: null, loading: false };
+let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, loading: false };
 
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function fmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-}
 async function apiFetch(params = {}) {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(qs ? `${API}?${qs}` : API);
@@ -117,7 +117,7 @@ function render() {
 function renderGenreNav() {
   const nav = document.getElementById('genreNav');
   nav.innerHTML = GENRES.map(g =>
-    `<button class="${g.key===state.genre?'active':''}" data-g="${g.key}">${g.label}</button>`
+    `<button class="${g.key===state.genre?'active':''}" data-g="${g.key}">${esc(g.label)}</button>`
   ).join('');
   nav.querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => { state.genre = b.dataset.g; gotoList(); })
@@ -161,7 +161,8 @@ function renderList(main) {
     if (b?.type === 'heading') preview = `<strong>${esc(b.content||'')}</strong>`;
     else if (b?.type === 'text') { const t = (b.content||'').replace(/\n/g,' '); preview = esc(t.length>120?t.slice(0,120)+'…':t); }
     else if (b?.type === 'image') preview = `<em style="color:#888">📷 画像</em>`;
-    card.innerHTML = `<div class="card-meta">${genreLabel} ・ ${fmtDate(a.created_at)}</div>
+    else if (b?.type === 'table') preview = `<em style="color:#888">📋 表</em>`;
+    card.innerHTML = `<div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)}</div>
       <div class="card-title">${esc(a.title)}</div>
       <div class="card-preview">${preview}</div>`;
     card.onclick = () => gotoDetail(a);
@@ -181,7 +182,7 @@ function renderDetail(main) {
   if (!a) { main.innerHTML = '<div class="empty">記事が見つかりません。</div>'; return; }
   const genreLabel = GENRES.find(g => g.key === a.genre)?.label || '';
   main.innerHTML = `<div class="article-detail">
-    <div class="detail-meta">${genreLabel} ・ 投稿日: ${fmtDate(a.created_at)} ・ 更新日: ${fmtDate(a.updated_at)}</div>
+    <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(a.created_at)} ・ 更新日: ${fmtDate(a.updated_at)}</div>
     <div id="blockOutput"></div></div>`;
   const out = document.getElementById('blockOutput');
   (a.blocks||[]).forEach(b => out.appendChild(makeBlock(b)));
@@ -195,7 +196,10 @@ function makeBlock(block) {
     div.innerHTML = `<h2>${esc(block.content||'')}</h2>`;
   } else if (block.type === 'text') {
     div.classList.add('block-text');
-    div.innerHTML = `<p>${esc(block.content||'')}</p>`;
+    div.innerHTML = `<div class="md-body">${mdText(block.content||'', boldStyleOf(block))}</div>`;
+  } else if (block.type === 'table') {
+    div.classList.add('block-table');
+    div.innerHTML = tableHTML(block.markdown||'', block.style||'plain');
   } else if (block.type === 'image') {
     div.classList.add('block-image');
     div.innerHTML = block.src

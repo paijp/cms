@@ -1,9 +1,27 @@
+<?php
+require __DIR__ . '/../api/lib.php';
+$token = (string)($_GET['token'] ?? '');
+if ($token !== '' && cms_token_valid($token)) {
+    // トークンURLでのアクセス: セッションCookieを発行し、トークンをURLから消す
+    cms_session_start_new();
+    header('Location: /cms/');
+    exit;
+}
+if (!cms_session_valid()) {
+    http_response_code(403);
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!DOCTYPE html><html lang="ja"><meta charset="UTF-8"><title>403 Forbidden</title><body style="font-family:sans-serif;text-align:center;padding:4rem;color:#555"><h1>403</h1><p>このページは管理者専用です。管理者用のトークン付きURLでアクセスしてください。</p></body></html>';
+    exit;
+}
+$cfg = cms_config();
+$siteName = htmlspecialchars($cfg['site_name'], ENT_QUOTES);
+?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CMS 管理画面</title>
+<title><?= $siteName ?> CMS 管理画面</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; color: #1a1a1a; background: #f0f2f5; min-height: 100vh; }
@@ -18,13 +36,14 @@ header {
   box-shadow: 0 2px 8px rgba(0,0,0,.3);
 }
 .logo { font-size: 1rem; font-weight: 700; letter-spacing: .03em; }
-.logo span { color: #f0a500; }
 .logo-sub { font-size: .75rem; color: rgba(255,255,255,.5); margin-left: .5rem; }
 .header-actions { display: flex; gap: .6rem; align-items: center; }
 .btn { cursor: pointer; font-family: inherit; border: none; border-radius: 5px; font-weight: 600; transition: background .15s, color .15s; }
 .btn-sm { padding: .35rem .9rem; font-size: .82rem; }
 .btn-new  { background: #27ae60; color: #fff; }
 .btn-new:hover  { background: #1e8449; }
+.btn-publish { background: #f0a500; color: #1a2a3a; }
+.btn-publish:hover { background: #d99400; }
 .btn-back { background: rgba(255,255,255,.15); color: #fff; }
 .btn-back:hover { background: rgba(255,255,255,.25); }
 .btn-view { background: rgba(78,168,222,.25); color: #9dd4f5; font-size: .78rem; }
@@ -59,9 +78,12 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 .card-meta { font-size: .75rem; color: #888; margin-bottom: .35rem; }
 .card-title { font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-preview { font-size: .85rem; color: #555; margin-top: .35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+.card-actions { display: flex; gap: .5rem; flex-shrink: 0; align-items: center; }
 .btn-edit-card { padding: .3rem .8rem; font-size: .8rem; background: #eaf4fd; color: #1c6fa8; border: 1px solid #b8d9f0; border-radius: 4px; cursor: pointer; }
 .btn-edit-card:hover { background: #cde6f8; }
+.btn-move { padding: .25rem .55rem; font-size: .85rem; background: #f4f6f8; color: #555; border: 1px solid #cdd3da; border-radius: 4px; cursor: pointer; }
+.btn-move:hover { background: #e2e8ee; color: #1a2a3a; }
+.btn-move:disabled { opacity: .35; cursor: default; }
 
 /* Editor */
 .editor { background: #fff; border-radius: 8px; border: 1px solid #dde2ea; padding: 2rem 2.5rem; }
@@ -90,7 +112,7 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 .btn-icon { border: none; background: none; font-size: .95rem; color: #999; padding: .18rem .32rem; border-radius: 4px; cursor: pointer; transition: background .1s, color .1s; }
 .btn-icon:hover { background: #eee; color: #c0392b; }
 .btn-icon.move:hover { color: #1a2a3a; }
-.block-item textarea, .block-item input[type=text] {
+.block-item textarea, .block-item input[type=text], .block-item select {
   width: 100%; padding: .48rem .7rem;
   border: 1px solid #cdd3da; border-radius: 4px;
   font-size: .88rem; font-family: inherit; resize: vertical;
@@ -104,6 +126,14 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 }
 .btn-add-block:hover { background: #fdefc0; }
 .img-preview { max-width: 100%; max-height: 180px; border-radius: 4px; margin-top: .4rem; display: block; }
+.bold-opts { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; align-items: center; }
+.bold-opts-label { font-size: .78rem; color: #666; font-weight: 600; }
+.block-item .bold-opts input[type=text] { width: 9.5rem; font-size: .8rem; padding: .3rem .5rem; }
+.table-opts { display: flex; gap: .4rem; margin-top: .45rem; align-items: center; }
+.table-opts-label { font-size: .78rem; color: #666; font-weight: 600; }
+.block-item .table-opts select { width: auto; font-size: .8rem; padding: .3rem .5rem; }
+.md-preview { border: 1px dashed #cdd3da; border-radius: 4px; background: #fff; padding: .5rem .7rem; margin-top: .45rem; font-size: .88rem; line-height: 1.7; overflow-x: auto; }
+.md-preview:empty { display: none; }
 
 /* Editor Actions */
 .editor-actions { display: flex; gap: .7rem; margin-top: 1.7rem; flex-wrap: wrap; }
@@ -114,6 +144,24 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 .btn-delete:hover { background: #c0392b; color: #fff; }
 .btn-cancel { padding: .58rem 1.2rem; background: none; color: #555; border: 1px solid #ccc; border-radius: 5px; font-size: .88rem; cursor: pointer; }
 .btn-cancel:hover { background: #f0f0f0; }
+
+/* Publish modal */
+#modalOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 500;
+  display: none; align-items: center; justify-content: center; padding: 2rem;
+}
+#modalOverlay.show { display: flex; }
+.modal {
+  background: #fff; border-radius: 8px; max-width: 800px; width: 100%;
+  max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.3);
+}
+.modal-header { padding: 1rem 1.5rem; font-weight: 700; color: #1a2a3a; border-bottom: 1px solid #dde2ea; }
+.modal-body { padding: 1rem 1.5rem; overflow: auto; flex: 1; }
+.modal-body pre { font-size: .78rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace; }
+.modal-body pre .d-add { color: #1e8449; }
+.modal-body pre .d-del { color: #c0392b; }
+.modal-body pre .d-hdr { color: #1c6fa8; font-weight: 700; }
+.modal-footer { padding: .9rem 1.5rem; border-top: 1px solid #dde2ea; display: flex; gap: .7rem; justify-content: flex-end; }
 
 /* Misc */
 .empty { text-align: center; color: #aaa; padding: 3rem 0; }
@@ -133,42 +181,51 @@ footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; 
 <div id="app">
   <header>
     <div>
-      <span class="logo">Sample<span>Tech</span></span>
+      <span class="logo"><?= $siteName ?></span>
       <span class="logo-sub">CMS 管理画面</span>
     </div>
     <div class="header-actions" id="headerActions"></div>
   </header>
   <nav class="genre-nav" id="genreNav"></nav>
   <main id="main"></main>
-  <footer>SampleTech CMS — 管理者専用ページ</footer>
+  <footer><?= $siteName ?> CMS — 管理者専用ページ</footer>
 </div>
 <div id="toast"></div>
+<div id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">公開前の確認 — 下書きと公開版の差分</div>
+    <div class="modal-body"><pre id="diffText"></pre></div>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" id="btnModalClose" style="padding:.5rem 1.2rem">閉じる</button>
+      <button class="btn btn-publish" id="btnModalPublish" style="padding:.5rem 1.5rem;border-radius:5px">公開する</button>
+    </div>
+  </div>
+</div>
 
+<script src="/assets/cms-render.js"></script>
 <script>
 const API = '/api/articles.php';
 const VIEW_BASE = '/';
-const GENRES = [
-  { key: 'news',    label: 'お知らせ' },
-  { key: 'product', label: '製品情報' },
-  { key: 'faq',     label: 'よくある質問' },
-  { key: 'about',   label: '企業情報' },
-];
+const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
 const BLOCK_TYPES = [
   { type: 'heading', label: '見出し' },
   { type: 'text',    label: '文章' },
+  { type: 'table',   label: '表' },
   { type: 'image',   label: '画像' },
 ];
+const TABLE_STYLE_OPTIONS = [
+  { value: 'plain',       label: '標準' },
+  { value: 'header-dark', label: '見出し濃色' },
+  { value: 'striped',     label: 'しましま' },
+  { value: 'form',        label: 'フォーム型（左列がラベル）' },
+  { value: 'borderless',  label: '罫線なし' },
+];
+const TABLE_SAMPLE_MD = `|見出し1|見出し2|見出し3|
+|A|B|C|
+|D|E|F|`;
 
-let state = { view: 'list', genre: 'news', articles: [], current: null, editing: null, loading: false };
+let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, editing: null, loading: false };
 
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function fmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-}
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -188,7 +245,7 @@ function render() { renderGenreNav(); renderHeader(); renderMain(); }
 function renderGenreNav() {
   const nav = document.getElementById('genreNav');
   nav.innerHTML = GENRES.map(g =>
-    `<button class="${g.key===state.genre?'active':''}" data-g="${g.key}">${g.label}</button>`
+    `<button class="${g.key===state.genre?'active':''}" data-g="${g.key}">${esc(g.label)}</button>`
   ).join('');
   nav.querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => { state.genre = b.dataset.g; gotoList(); })
@@ -197,10 +254,11 @@ function renderGenreNav() {
 
 function renderHeader() {
   const el = document.getElementById('headerActions');
-  const viewLink = `<a href="${VIEW_BASE}" target="_blank"><button class="btn btn-sm btn-view">閲覧ページ ↗</button></a>`;
+  const viewLink = `<a href="${VIEW_BASE}" target="_blank"><button class="btn btn-sm btn-view">プレビュー ↗</button></a>`;
   if (state.view === 'list') {
-    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
+    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
     document.getElementById('btnNew').onclick = () => gotoEditor(null);
+    document.getElementById('btnPublish').onclick = openPublishModal;
   } else {
     el.innerHTML = `${viewLink} <button class="btn btn-sm btn-back" id="btnBack">← 一覧へ</button>`;
     document.getElementById('btnBack').onclick = () => gotoList();
@@ -214,6 +272,32 @@ function renderMain() {
   if (state.view === 'editor') renderEditor(main);
 }
 
+/* ---- 公開（差分確認 → 反映） ---- */
+function diffToHTML(text) {
+  return text.split('\n').map(l => {
+    const e = esc(l);
+    if (l.startsWith('+++') || l.startsWith('---') || l.startsWith('diff ') || l.startsWith('@@')) return `<span class="d-hdr">${e}</span>`;
+    if (l.startsWith('+')) return `<span class="d-add">${e}</span>`;
+    if (l.startsWith('-')) return `<span class="d-del">${e}</span>`;
+    return e;
+  }).join('\n');
+}
+async function openPublishModal() {
+  const r = await api('GET', { diff: 1 });
+  const overlay = document.getElementById('modalOverlay');
+  const pre = document.getElementById('diffText');
+  const hasChanges = (r.diff || '').trim() !== '';
+  pre.innerHTML = hasChanges ? diffToHTML(r.diff) : '変更はありません。下書きと公開版は同じ内容です。';
+  document.getElementById('btnModalPublish').style.display = hasChanges ? '' : 'none';
+  overlay.classList.add('show');
+}
+document.getElementById('btnModalClose').onclick = () => document.getElementById('modalOverlay').classList.remove('show');
+document.getElementById('btnModalPublish').onclick = async () => {
+  const r = await api('POST', { publish: 1 });
+  document.getElementById('modalOverlay').classList.remove('show');
+  showToast(`公開しました（更新 ${r.updated} 件 / 削除 ${r.removed} 件）`);
+};
+
 /* ---- List ---- */
 async function gotoList() {
   state.view = 'list'; state.current = null; state.editing = null; state.loading = true; render();
@@ -221,12 +305,20 @@ async function gotoList() {
   state.loading = false; render();
 }
 
+async function moveArticle(idx, dir) {
+  const j = dir === 'up' ? idx - 1 : idx + 1;
+  if (j < 0 || j >= state.articles.length) return;
+  [state.articles[idx], state.articles[j]] = [state.articles[j], state.articles[idx]];
+  await api('POST', { reorder: 1 }, { ids: state.articles.map(a => a.id) });
+  render();
+}
+
 function renderList(main) {
   const genreLabel = GENRES.find(g => g.key === state.genre)?.label || '';
   if (!state.articles.length) { main.innerHTML = '<div class="empty">記事がありません。「＋ 新規記事」から作成してください。</div>'; return; }
   main.innerHTML = '<div class="article-list" id="articleList"></div>';
   const list = document.getElementById('articleList');
-  state.articles.forEach(a => {
+  state.articles.forEach((a, idx) => {
     const card = document.createElement('div');
     card.className = 'article-card';
     const b = a.blocks?.[0];
@@ -234,15 +326,21 @@ function renderList(main) {
     if (b?.type === 'heading') preview = b.content || '';
     else if (b?.type === 'text') { const t = (b.content||'').replace(/\n/g,' '); preview = t.length>80?t.slice(0,80)+'…':t; }
     else if (b?.type === 'image') preview = '📷 画像';
+    else if (b?.type === 'table') preview = '📋 表';
     card.innerHTML = `
       <div class="card-body">
-        <div class="card-meta">${genreLabel} ・ ${fmtDate(a.created_at)} 更新: ${fmtDate(a.updated_at)}</div>
+        <div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)} 更新: ${fmtDate(a.updated_at)}</div>
         <div class="card-title">${esc(a.title)}</div>
         ${preview ? `<div class="card-preview">${esc(preview)}</div>` : ''}
       </div>
       <div class="card-actions">
+        <button class="btn-move" data-dir="up" title="上へ" ${idx===0?'disabled':''}>↑</button>
+        <button class="btn-move" data-dir="down" title="下へ" ${idx===state.articles.length-1?'disabled':''}>↓</button>
         <button class="btn-edit-card">✎ 編集</button>
       </div>`;
+    card.querySelectorAll('.btn-move').forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); moveArticle(idx, btn.dataset.dir); };
+    });
     card.querySelector('.btn-edit-card').onclick = async (e) => {
       e.stopPropagation();
       const full = await api('GET', { id: a.id });
@@ -269,10 +367,10 @@ function renderEditor(main) {
   const isNew = !e.created_at;
   main.innerHTML = `
     <div class="editor">
-      <h2>${isNew ? '新規記事の作成' : '記事を編集'}</h2>
+      <h2>${isNew ? '新規記事の作成' : '記事を編集（下書きに保存されます）'}</h2>
       <div class="form-row">
         <label>ジャンル</label>
-        <select id="eGenre">${GENRES.map(g=>`<option value="${g.key}"${g.key===e.genre?' selected':''}>${g.label}</option>`).join('')}</select>
+        <select id="eGenre">${GENRES.map(g=>`<option value="${g.key}"${g.key===e.genre?' selected':''}>${esc(g.label)}</option>`).join('')}</select>
       </div>
       <div class="form-row">
         <label>タイトル</label>
@@ -286,7 +384,7 @@ function renderEditor(main) {
         </div>
       </div>
       <div class="editor-actions">
-        <button class="btn-save" id="btnSave">保存する</button>
+        <button class="btn-save" id="btnSave">下書き保存</button>
         ${!isNew ? `<button class="btn-delete" id="btnDelete">削除する</button>` : ''}
         <button class="btn-cancel" id="btnCancel">キャンセル</button>
       </div>
@@ -337,9 +435,49 @@ function buildBlockEditor(block, idx) {
     bce.appendChild(inp);
   } else if (block.type === 'text') {
     const ta = document.createElement('textarea');
-    ta.rows = 5; ta.placeholder = '本文を入力（改行も反映されます）'; ta.value = block.content||'';
-    ta.oninput = ev => { e.blocks[idx].content = ev.target.value; };
+    ta.rows = 5; ta.placeholder = '本文を入力（md書式: **強調** / - 箇条書き / 1. 番号付き / 空行=空行）'; ta.value = block.content||'';
     bce.appendChild(ta);
+    const opts = document.createElement('div');
+    opts.className = 'bold-opts';
+    opts.innerHTML = `
+      <span class="bold-opts-label">強調（**太字**）の表示:</span>
+      <input type="text" data-k="bold_color" placeholder="文字色 (#c00)" value="${esc(block.bold_color||'')}">
+      <input type="text" data-k="bold_bg_color" placeholder="背景色 (#ff9)" value="${esc(block.bold_bg_color||'')}">
+      <input type="text" data-k="bold_ul_thick" placeholder="下線太さ (2px)" value="${esc(block.bold_ul_thick||'')}">
+      <input type="text" data-k="bold_ul_color" placeholder="下線色 (#c00)" value="${esc(block.bold_ul_color||'')}">`;
+    bce.appendChild(opts);
+    const pv = document.createElement('div');
+    pv.className = 'md-preview';
+    bce.appendChild(pv);
+    const upd = () => { pv.innerHTML = mdText(e.blocks[idx].content||'', boldStyleOf(e.blocks[idx])); };
+    ta.oninput = ev => { e.blocks[idx].content = ev.target.value; upd(); };
+    opts.querySelectorAll('input').forEach(inp => {
+      inp.oninput = ev => {
+        const v = ev.target.value.trim();
+        if (v) e.blocks[idx][inp.dataset.k] = v; else delete e.blocks[idx][inp.dataset.k];
+        upd();
+      };
+    });
+    upd();
+  } else if (block.type === 'table') {
+    const ta = document.createElement('textarea');
+    ta.rows = 5;
+    ta.placeholder = '|見出し1|見出し2|\n|A|B|\n※セル前後の空白で寄せ指定（| x|=右, | x |=中央）、< で左と結合、^ で上と結合、&br; で改行';
+    ta.value = block.markdown||'';
+    bce.appendChild(ta);
+    const opts = document.createElement('div');
+    opts.className = 'table-opts';
+    opts.innerHTML = `
+      <span class="table-opts-label">表のスタイル:</span>
+      <select>${TABLE_STYLE_OPTIONS.map(o=>`<option value="${o.value}"${o.value===(block.style||'plain')?' selected':''}>${o.label}</option>`).join('')}</select>`;
+    bce.appendChild(opts);
+    const pv = document.createElement('div');
+    pv.className = 'md-preview';
+    bce.appendChild(pv);
+    const upd = () => { pv.innerHTML = tableHTML(e.blocks[idx].markdown||'', e.blocks[idx].style||'plain'); };
+    ta.oninput = ev => { e.blocks[idx].markdown = ev.target.value; upd(); };
+    opts.querySelector('select').onchange = ev => { e.blocks[idx].style = ev.target.value; upd(); };
+    upd();
   } else if (block.type === 'image') {
     const urlInp = document.createElement('input');
     urlInp.type = 'text'; urlInp.placeholder = '画像URL'; urlInp.value = block.src||'';
@@ -383,6 +521,7 @@ function addBlock(type) {
   const block = { type };
   if (type==='heading') block.content='';
   if (type==='text')    block.content='';
+  if (type==='table')   { block.markdown=TABLE_SAMPLE_MD; block.style='plain'; }
   if (type==='image')   { block.src=''; block.caption=''; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
@@ -396,16 +535,16 @@ async function saveArticle() {
   btn.disabled = true; btn.textContent = '保存中...';
   try {
     await api('POST', {}, e);
-    showToast('保存しました');
+    showToast('下書きに保存しました（公開するには「公開」を押してください）');
     gotoList();
   } catch {
     showToast('保存に失敗しました');
-    btn.disabled = false; btn.textContent = '保存する';
+    btn.disabled = false; btn.textContent = '下書き保存';
   }
 }
 
 async function deleteArticle() {
-  if (!confirm('この記事を削除しますか？')) return;
+  if (!confirm('この記事を下書きから削除しますか？（公開版からは次回の「公開」で消えます）')) return;
   await api('DELETE', { id: state.editing.id });
   showToast('削除しました');
   gotoList();
