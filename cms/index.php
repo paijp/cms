@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/../api/lib.php';
+header('Cache-Control: no-store');
 $token = (string)($_GET['token'] ?? '');
 if ($token !== '' && cms_token_valid($token)) {
     // トークンURLでのアクセス: セッションCookieを発行し、トークンをURLから消す
@@ -15,6 +16,7 @@ if (!cms_session_valid()) {
 }
 $cfg = cms_config();
 $siteName = htmlspecialchars($cfg['site_name'], ENT_QUOTES);
+$assetVer = @filemtime(__DIR__ . '/../assets/cms-render.js') ?: 0;
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -202,7 +204,7 @@ footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; 
   </div>
 </div>
 
-<script src="/assets/cms-render.js"></script>
+<script src="/assets/cms-render.js?v=<?= $assetVer ?>"></script>
 <script>
 const API = '/api/articles.php';
 const VIEW_BASE = '/';
@@ -366,7 +368,7 @@ function renderList(main) {
     card.innerHTML = `
       <div class="card-body">
         <div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)} 更新: ${fmtDate(a.updated_at)}</div>
-        <div class="card-title">${esc(a.title)}</div>
+        <div class="card-title">${a.hidden?'<span style="background:#e0e5eb;color:#555;font-size:.7rem;font-weight:700;padding:.1rem .45rem;border-radius:99px;margin-right:.4rem;vertical-align:middle">非表示</span>':''}${esc(a.title)}</div>
         ${preview ? `<div class="card-preview">${esc(preview)}</div>` : ''}
       </div>
       <div class="card-actions">
@@ -415,6 +417,10 @@ function renderEditor(main) {
         <label>タイトル</label>
         <input type="text" id="eTitle" value="${esc(e.title)}" placeholder="記事のタイトルを入力">
       </div>
+      <div class="form-row" style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" id="eHidden" ${e.hidden?'checked':''} style="width:auto">
+        <label for="eHidden" style="margin:0;cursor:pointer">非表示（管理画面には表示されますが、公開ページには表示されません）</label>
+      </div>
       <div class="blocks-editor">
         <div class="blocks-editor-label">ブロック</div>
         <div id="blocksContainer"></div>
@@ -432,6 +438,7 @@ function renderEditor(main) {
   renderBlocksEditor();
   document.getElementById('eGenre').onchange = ev => { e.genre = ev.target.value; };
   document.getElementById('eTitle').oninput  = ev => { e.title = ev.target.value; };
+  document.getElementById('eHidden').onchange = ev => { e.hidden = ev.target.checked; };
   document.getElementById('btnSave').onclick   = saveArticle;
   document.getElementById('btnCancel').onclick = () => gotoList();
   const btnDel = document.getElementById('btnDelete');

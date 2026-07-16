@@ -62,11 +62,12 @@ function delete_article($dir, $id) {
     return file_exists($path) && unlink($path);
 }
 
-function list_articles($dir, $genre = null) {
+function list_articles($dir, $genre = null, $show_hidden = false) {
     $articles = [];
     foreach (glob($dir . '*.json') as $f) {
         $a = json_decode(file_get_contents($f), true);
         if ($genre && ($a['genre'] ?? '') !== $genre) continue;
+        if (!$show_hidden && !empty($a['hidden'])) continue;
         // ダイジェスト用は「見出し以外の最初のブロック」を返す（タイトルとの重複を避ける）
         $preview = null;
         foreach (($a['blocks'] ?? []) as $b) {
@@ -163,9 +164,11 @@ if ($method === 'GET') {
     }
     if (isset($_GET['id'])) {
         $a = load_article($READ_DIR, $_GET['id']);
-        $a ? respond($a) : respond(['error' => 'Not found'], 404);
+        if (!$a) respond(['error' => 'Not found'], 404);
+        if (!$IS_ADMIN && !empty($a['hidden'])) respond(['error' => 'Not found'], 404);
+        respond($a);
     }
-    respond(list_articles($READ_DIR, $_GET['genre'] ?? null));
+    respond(list_articles($READ_DIR, $_GET['genre'] ?? null, $IS_ADMIN));
 }
 
 if ($method === 'POST') {
@@ -205,6 +208,7 @@ if ($method === 'POST') {
         $body['created_at'] = $now;
     }
     $body['updated_at'] = $now;
+    $body['hidden'] = !empty($body['hidden']);
     $body['blocks'] = sanitize_blocks($body['blocks'] ?? []);
     save_article($DRAFT_DIR, $body) ? respond($body) : respond(['error' => 'Save failed'], 500);
 }

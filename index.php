@@ -1,8 +1,10 @@
 <?php
 require __DIR__ . '/api/lib.php';
+header('Cache-Control: no-store');
 $cfg = cms_config();
 $isAdmin = cms_session_valid();
 $siteName = htmlspecialchars($cfg['site_name'], ENT_QUOTES);
+$assetVer = @filemtime(__DIR__ . '/assets/cms-render.js') ?: 0;
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -95,7 +97,7 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
   <main id="main"></main>
   <footer><?= htmlspecialchars($cfg['copyright'], ENT_QUOTES) ?></footer>
 </div>
-<script src="/assets/cms-render.js"></script>
+<script src="/assets/cms-render.js?v=<?= $assetVer ?>"></script>
 <script>
 const API = '/api/articles.php';
 const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
