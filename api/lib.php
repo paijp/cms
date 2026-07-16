@@ -14,7 +14,7 @@ define('CMS_COOKIE_TTL', 60 * 60 * 24 * 400); // ブラウザ側Cookieの期限�
 function cms_config() {
     static $cfg = null;
     if ($cfg === null) {
-        $path = getenv('CMS_CONFIG') ?: '/var/www/kimoken-cms/site.php';
+        $path = getenv('CMS_CONFIG') ?: '/var/www/kimoken-cms/data/site.php';
         $cfg = require $path;
     }
     return $cfg;
