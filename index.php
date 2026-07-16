@@ -61,8 +61,6 @@ main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
   transition: box-shadow .15s, transform .1s;
 }
 .article-card:hover { box-shadow: 0 4px 16px rgba(28,53,87,.12); transform: translateY(-2px); }
-.article-card .card-link-more { font-size: .82rem; color: #1c6fa8; margin-top: .55rem; }
-.article-card .card-link-more strong { color: #1c3557; }
 .card-meta { font-size: .78rem; color: #888; margin-bottom: .5rem; }
 .card-title { font-size: 1.05rem; font-weight: 700; margin-bottom: .7rem; }
 .card-preview { font-size: .9rem; color: #444; line-height: 1.7; }
@@ -104,27 +102,34 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 const API = '/api/articles.php';
 const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
 
-let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, loading: false };
+let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, linkDetail: null, loading: false };
 
 function readUrl() {
   const p = new URLSearchParams(location.search);
   const g = p.get('g');
   if (g && GENRES.some(x => x.key === g)) state.genre = g;
-  return { id: p.get('id') };
+  return { id: p.get('id'), link: p.get('link') };
 }
 function pushUrl(replace) {
   const p = new URLSearchParams();
   p.set('g', state.genre);
   if (state.view === 'detail' && state.current) p.set('id', state.current.id);
+  if (state.view === 'link_detail' && state.linkDetail) p.set('link', state.linkDetail.src_id);
   const url = '?' + p.toString();
-  const st = { view: state.view, g: state.genre, id: state.current?.id || null };
+  const st = {
+    view: state.view, g: state.genre,
+    id: state.current?.id || null,
+    link: state.linkDetail?.src_id || null,
+  };
   if (replace) history.replaceState(st, '', url);
   else history.pushState(st, '', url);
 }
 window.addEventListener('popstate', async (ev) => {
   const st = ev.state || {};
   if (st.g && st.g !== state.genre) state.genre = st.g;
-  if (st.view === 'detail' && st.id) {
+  if (st.view === 'link_detail' && st.link) {
+    await gotoLinkById(st.link, true);
+  } else if (st.view === 'detail' && st.id) {
     state.loading = true; state.view = 'detail'; render();
     state.current = await apiFetch({ id: st.id });
     state.loading = false; render();
@@ -168,8 +173,9 @@ function renderHeader() {
 function renderMain() {
   const main = document.getElementById('main');
   if (state.loading) { main.innerHTML = '<div class="loading">読み込み中...</div>'; return; }
-  if (state.view === 'list')   renderList(main);
-  if (state.view === 'detail') renderDetail(main);
+  if (state.view === 'list')        renderList(main);
+  if (state.view === 'detail')      renderDetail(main);
+  if (state.view === 'link_detail') renderLinkDetail(main);
 }
 
 /* List */
@@ -194,21 +200,59 @@ function renderList(main) {
     else if (b?.type === 'text') { const t = (b.content||'').replace(/\n/g,' '); preview = esc(t.length>120?t.slice(0,120)+'…':t); }
     else if (b?.type === 'image') preview = `<em style="color:#888">📷 画像</em>`;
     else if (b?.type === 'table') preview = `<em style="color:#888">📋 表</em>`;
-    let extra = '';
-    if (a.cross_link) {
-      const srcLabel = GENRES.find(g => g.key === a.src_genre)?.label || a.src_genre;
-      extra = `<div class="card-link-more">詳しくは <strong>${esc(srcLabel)}</strong> をご覧下さい →</div>`;
-    }
     card.innerHTML = `<div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)}</div>
       <div class="card-title">${esc(a.title)}</div>
-      <div class="card-preview">${preview}</div>${extra}`;
+      <div class="card-preview">${preview}</div>`;
     card.onclick = () => {
-      // クロスリンクの場合は、リンク先のジャンルに切り替えてから記事を開く（タブも切り替わる）
-      if (a.cross_link && a.src_genre) state.genre = a.src_genre;
-      gotoDetail(a);
+      if (a.cross_link) gotoLink(a);
+      else gotoDetail(a);
     };
     list.appendChild(card);
   });
+}
+
+/* Cross-link detail */
+async function gotoLink(listItem, noPush) {
+  state.view = 'link_detail';
+  state.linkDetail = {
+    src_id: listItem.id,
+    src_genre: listItem.src_genre,
+    title: listItem.title,
+    text: listItem.blocks?.[0]?.content || '',
+    created_at: listItem.created_at,
+    updated_at: listItem.updated_at,
+  };
+  render();
+  if (!noPush) pushUrl(false);
+}
+async function gotoLinkById(srcId, noPush) {
+  state.view = 'link_detail'; state.loading = true; render();
+  const r = await apiFetch({ link: srcId, target: state.genre });
+  state.loading = false;
+  if (!r || r.error) { await gotoList(true); return; }
+  state.linkDetail = r;
+  render();
+  if (!noPush) pushUrl(false);
+}
+function renderLinkDetail(main) {
+  const d = state.linkDetail;
+  if (!d) { main.innerHTML = '<div class="empty">記事が見つかりません。</div>'; return; }
+  const genreLabel = GENRES.find(g => g.key === state.genre)?.label || '';
+  const srcLabel = GENRES.find(g => g.key === d.src_genre)?.label || d.src_genre;
+  main.innerHTML = `<div class="article-detail">
+    <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(d.created_at)} ・ 更新日: ${fmtDate(d.updated_at)}</div>
+    <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(d.title||'')}</h1>
+    <div class="block block-text"><div class="md-body">${mdText(d.text||'', '')}</div></div>
+    <p style="margin-top:1.5rem;font-size:.95rem;">詳しくは <a href="#" id="linkToSrc" style="color:#1c6fa8;font-weight:700;text-decoration:underline">${esc(srcLabel)}</a> をご覧下さい</p>
+  </div>`;
+  document.getElementById('linkToSrc').onclick = async (ev) => {
+    ev.preventDefault();
+    state.genre = d.src_genre;
+    state.loading = true; state.view = 'detail'; state.linkDetail = null; render();
+    state.current = await apiFetch({ id: d.src_id });
+    state.loading = false; render();
+    pushUrl(false);
+  };
 }
 
 /* Detail */
@@ -259,8 +303,11 @@ function makeBlock(block) {
 
 /* 初期表示: URLパラメータから復元 */
 (async () => {
-  const { id } = readUrl();
-  if (id) {
+  const { id, link } = readUrl();
+  if (link) {
+    await gotoLinkById(link, true);
+    pushUrl(true);
+  } else if (id) {
     state.view = 'detail'; state.loading = true; render();
     state.current = await apiFetch({ id });
     state.loading = false; render();

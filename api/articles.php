@@ -8,6 +8,7 @@
  *
  * GET    ?genre=news       -> 記事一覧（先頭ブロックのみ）
  * GET    ?id=news-001      -> 記事詳細（全ブロック）
+ * GET    ?link=<id>&target=<genre> -> クロスリンクの詳細（block.title/text/元記事情報）
  *        ※閲覧は管理者ログイン中なら下書き版、未ログインなら公開版
  * GET    ?site=1           -> サイト情報（サイト名・ジャンル）※公開
  * GET    ?diff=1           -> 下書きと公開版のテキスト差分 ※管理者
@@ -209,6 +210,26 @@ if ($method === 'GET') {
             'drafts'      => $dump($DRAFT_DIR),
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
+    }
+    if (isset($_GET['link'])) {
+        $src = load_article($READ_DIR, $_GET['link']);
+        if (!$src) respond(['error' => 'Not found'], 404);
+        if (!$SHOW_HIDDEN && !empty($src['hidden'])) respond(['error' => 'Not found'], 404);
+        $target = $_GET['target'] ?? '';
+        foreach ($src['blocks'] ?? [] as $b) {
+            if (($b['type'] ?? '') !== 'link_from') continue;
+            if (($b['target_genre'] ?? '') !== $target) continue;
+            respond([
+                'src_id'       => $src['id'] ?? '',
+                'src_genre'    => $src['genre'] ?? '',
+                'target_genre' => $target,
+                'title'        => $b['title'] ?? '',
+                'text'         => $b['text'] ?? '',
+                'created_at'   => $src['created_at'] ?? null,
+                'updated_at'   => $src['updated_at'] ?? null,
+            ]);
+        }
+        respond(['error' => 'Not found'], 404);
     }
     if (isset($_GET['id'])) {
         $a = load_article($READ_DIR, $_GET['id']);
