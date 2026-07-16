@@ -67,18 +67,39 @@ function delete_article($dir, $id) {
 }
 
 function list_articles($dir, $genre = null, $show_hidden = false) {
+    // このジャンルにクロスリンクを流し込むブロック型（例: news 一覧には link_from_news ブロックの内容を混ぜる）
+    $link_type = $genre ? ('link_from_' . $genre) : null;
     $articles = [];
     foreach (glob($dir . '*.json') as $f) {
         $a = json_decode(file_get_contents($f), true);
-        if ($genre && ($a['genre'] ?? '') !== $genre) continue;
         if (!$show_hidden && !empty($a['hidden'])) continue;
-        // ダイジェスト用は「見出し以外の最初のブロック」を返す（タイトルとの重複を避ける）
-        $preview = null;
-        foreach (($a['blocks'] ?? []) as $b) {
-            if (($b['type'] ?? '') !== 'heading') { $preview = $b; break; }
+        $blocks = $a['blocks'] ?? [];
+        if (!$genre || ($a['genre'] ?? '') === $genre) {
+            // 通常の記事: ダイジェスト用に「見出しとクロスリンク以外の最初のブロック」を返す
+            $preview = null;
+            foreach ($blocks as $b) {
+                $t = $b['type'] ?? '';
+                if ($t !== 'heading' && strpos($t, 'link_from_') !== 0) { $preview = $b; break; }
+            }
+            $a['blocks'] = $preview ? [$preview] : [];
+            $articles[] = $a;
         }
-        $a['blocks'] = $preview ? [$preview] : [];
-        $articles[] = $a;
+        // 他ジャンル記事に link_from_$genre ブロックがあれば擬似カードとして追加
+        if ($link_type && ($a['genre'] ?? '') !== $genre) {
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? '') !== $link_type) continue;
+                $articles[] = [
+                    'id'         => $a['id'] ?? '',
+                    'genre'      => $genre,          // 一覧の表示上のジャンル
+                    'src_genre'  => $a['genre'] ?? '',
+                    'title'      => $b['title'] ?? ($a['title'] ?? ''),
+                    'created_at' => $a['created_at'] ?? null,
+                    'updated_at' => $a['updated_at'] ?? null,
+                    'cross_link' => true,
+                    'blocks'     => [['type' => 'text', 'content' => $b['text'] ?? '']],
+                ];
+            }
+        }
     }
     usort($articles, function ($a, $b) {
         $sa = $a['sort'] ?? PHP_INT_MAX;
@@ -111,6 +132,10 @@ function sanitize_block($b) {
         $style = $b['style'] ?? 'plain';
         if (!in_array($style, ['plain', 'header-dark', 'striped', 'form', 'borderless'], true)) $style = 'plain';
         return ['type' => 'table', 'markdown' => (string)($b['markdown'] ?? ''), 'style' => $style];
+    }
+    // ジャンルへのクロスリンクブロック（link_from_<genre>）
+    if (is_string($b['type']) && preg_match('/^link_from_[a-zA-Z0-9_\-]+$/', $b['type'])) {
+        return ['type' => $b['type'], 'title' => (string)($b['title'] ?? ''), 'text' => (string)($b['text'] ?? '')];
     }
     return null;
 }

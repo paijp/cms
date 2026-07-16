@@ -61,6 +61,9 @@ main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
   transition: box-shadow .15s, transform .1s;
 }
 .article-card:hover { box-shadow: 0 4px 16px rgba(28,53,87,.12); transform: translateY(-2px); }
+.article-card.cross-link { border-left: 4px solid #f0a500; background: #fffdf6; }
+.article-card .card-link-more { font-size: .82rem; color: #1c6fa8; margin-top: .55rem; }
+.article-card .card-link-more strong { color: #1c3557; }
 .card-meta { font-size: .78rem; color: #888; margin-bottom: .5rem; }
 .card-title { font-size: 1.05rem; font-weight: 700; margin-bottom: .7rem; }
 .card-preview { font-size: .9rem; color: #444; line-height: 1.7; }
@@ -185,16 +188,21 @@ function renderList(main) {
   const list = document.getElementById('articleList');
   state.articles.forEach(a => {
     const card = document.createElement('div');
-    card.className = 'article-card';
+    card.className = 'article-card' + (a.cross_link ? ' cross-link' : '');
     const b = a.blocks?.[0];
     let preview = '';
     if (b?.type === 'heading') preview = `<strong>${esc(b.content||'')}</strong>`;
     else if (b?.type === 'text') { const t = (b.content||'').replace(/\n/g,' '); preview = esc(t.length>120?t.slice(0,120)+'…':t); }
     else if (b?.type === 'image') preview = `<em style="color:#888">📷 画像</em>`;
     else if (b?.type === 'table') preview = `<em style="color:#888">📋 表</em>`;
+    let extra = '';
+    if (a.cross_link) {
+      const srcLabel = GENRES.find(g => g.key === a.src_genre)?.label || a.src_genre;
+      extra = `<div class="card-link-more">詳しくは <strong>${esc(srcLabel)}</strong> をご覧下さい →</div>`;
+    }
     card.innerHTML = `<div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)}</div>
       <div class="card-title">${esc(a.title)}</div>
-      <div class="card-preview">${preview}</div>`;
+      <div class="card-preview">${preview}</div>${extra}`;
     card.onclick = () => gotoDetail(a);
     list.appendChild(card);
   });
@@ -217,7 +225,11 @@ function renderDetail(main) {
     <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(a.title||'')}</h1>
     <div id="blockOutput"></div></div>`;
   const out = document.getElementById('blockOutput');
-  (a.blocks||[]).forEach(b => out.appendChild(makeBlock(b)));
+  (a.blocks||[]).forEach(b => {
+    // 元記事を開いたとき、クロスリンクブロックはこのページには表示しない
+    if (typeof b.type === 'string' && b.type.startsWith('link_from_')) return;
+    out.appendChild(makeBlock(b));
+  });
 }
 
 function makeBlock(block) {

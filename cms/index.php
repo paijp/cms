@@ -214,6 +214,7 @@ const BLOCK_TYPES = [
   { type: 'text',    label: '文章' },
   { type: 'table',   label: '表' },
   { type: 'image',   label: '画像' },
+  ...GENRES.map(g => ({ type: 'link_from_' + g.key, label: g.label + 'からリンク' })),
 ];
 const TABLE_STYLE_OPTIONS = [
   { value: 'plain',       label: '標準' },
@@ -524,6 +525,22 @@ function buildBlockEditor(block, idx) {
     ta.oninput = ev => { e.blocks[idx].markdown = ev.target.value; upd(); };
     opts.querySelector('select').onchange = ev => { e.blocks[idx].style = ev.target.value; upd(); };
     upd();
+  } else if (typeof block.type === 'string' && block.type.startsWith('link_from_')) {
+    const targetKey = block.type.slice('link_from_'.length);
+    const targetLabel = GENRES.find(g => g.key === targetKey)?.label || targetKey;
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:.78rem;color:#666;margin-bottom:.5rem;padding:.4rem .6rem;background:#fffbf0;border:1px dashed #f0a500;border-radius:4px';
+    note.innerHTML = `このブロックはこの記事のページには表示されず、<strong>${esc(targetLabel)}</strong>の一覧に「タイトル + 文章 + 詳しくは… リンク」として表示されます。`;
+    bce.appendChild(note);
+    const titleInp = document.createElement('input');
+    titleInp.type = 'text'; titleInp.placeholder = 'タイトル'; titleInp.value = block.title||'';
+    titleInp.oninput = ev => { e.blocks[idx].title = ev.target.value; };
+    bce.appendChild(titleInp);
+    const ta = document.createElement('textarea');
+    ta.rows = 3; ta.placeholder = '文章'; ta.value = block.text||'';
+    ta.style.marginTop = '.4rem';
+    ta.oninput = ev => { e.blocks[idx].text = ev.target.value; };
+    bce.appendChild(ta);
   } else if (block.type === 'image') {
     const urlInp = document.createElement('input');
     urlInp.type = 'text'; urlInp.placeholder = '画像URL'; urlInp.value = block.src||'';
@@ -569,6 +586,7 @@ function addBlock(type) {
   if (type==='text')    block.content='';
   if (type==='table')   { block.markdown=TABLE_SAMPLE_MD; block.style='plain'; }
   if (type==='image')   { block.src=''; block.caption=''; }
+  if (type.startsWith('link_from_')) { block.title=''; block.text=''; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
   document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
