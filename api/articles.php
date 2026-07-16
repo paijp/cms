@@ -43,7 +43,7 @@ function require_admin() {
 }
 
 function safe_id($id) {
-    return preg_match('/^[a-zA-Z0-9\-]+$/', $id) ? $id : null;
+    return preg_match('/^[a-zA-Z0-9_\-]+$/', $id) ? $id : null;
 }
 
 function load_article($dir, $id) {
