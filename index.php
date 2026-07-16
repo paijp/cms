@@ -227,7 +227,7 @@ function renderDetail(main) {
   const out = document.getElementById('blockOutput');
   (a.blocks||[]).forEach(b => {
     // 元記事を開いたとき、クロスリンクブロックはこのページには表示しない
-    if (typeof b.type === 'string' && b.type.startsWith('link_from_')) return;
+    if (b.type === 'link_from') return;
     out.appendChild(makeBlock(b));
   });
 }

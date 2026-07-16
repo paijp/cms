@@ -210,11 +210,11 @@ const API = '/api/articles.php';
 const VIEW_BASE = '/';
 const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
 const BLOCK_TYPES = [
-  { type: 'heading', label: '見出し' },
-  { type: 'text',    label: '文章' },
-  { type: 'table',   label: '表' },
-  { type: 'image',   label: '画像' },
-  ...GENRES.map(g => ({ type: 'link_from_' + g.key, label: g.label + 'からリンク' })),
+  { type: 'heading',   label: '見出し' },
+  { type: 'text',      label: '文章' },
+  { type: 'table',     label: '表' },
+  { type: 'image',     label: '画像' },
+  { type: 'link_from', label: '他ジャンルからリンク' },
 ];
 const TABLE_STYLE_OPTIONS = [
   { value: 'plain',       label: '標準' },
@@ -525,15 +525,26 @@ function buildBlockEditor(block, idx) {
     ta.oninput = ev => { e.blocks[idx].markdown = ev.target.value; upd(); };
     opts.querySelector('select').onchange = ev => { e.blocks[idx].style = ev.target.value; upd(); };
     upd();
-  } else if (typeof block.type === 'string' && block.type.startsWith('link_from_')) {
-    const targetKey = block.type.slice('link_from_'.length);
-    const targetLabel = GENRES.find(g => g.key === targetKey)?.label || targetKey;
+  } else if (block.type === 'link_from') {
     const note = document.createElement('div');
     note.style.cssText = 'font-size:.78rem;color:#666;margin-bottom:.5rem;padding:.4rem .6rem;background:#fffbf0;border:1px dashed #f0a500;border-radius:4px';
-    note.innerHTML = `このブロックはこの記事のページには表示されず、<strong>${esc(targetLabel)}</strong>の一覧に「タイトル + 文章 + 詳しくは… リンク」として表示されます。`;
+    const updNote = () => {
+      const tg = e.blocks[idx].target_genre;
+      const tl = GENRES.find(g => g.key === tg)?.label;
+      note.innerHTML = tl
+        ? `このブロックはこの記事のページには表示されず、<strong>${esc(tl)}</strong>の一覧に「タイトル + 文章 + 詳しくは… リンク」として表示されます。`
+        : 'リンク先ジャンルを選択してください。';
+    };
     bce.appendChild(note);
+    const sel = document.createElement('select');
+    sel.innerHTML = '<option value="">(リンク先ジャンルを選択)</option>' +
+      GENRES.filter(g => g.key !== e.genre)
+            .map(g => `<option value="${esc(g.key)}"${g.key===block.target_genre?' selected':''}>${esc(g.label)}</option>`).join('');
+    sel.onchange = ev => { e.blocks[idx].target_genre = ev.target.value; updNote(); };
+    bce.appendChild(sel);
     const titleInp = document.createElement('input');
     titleInp.type = 'text'; titleInp.placeholder = 'タイトル'; titleInp.value = block.title||'';
+    titleInp.style.marginTop = '.4rem';
     titleInp.oninput = ev => { e.blocks[idx].title = ev.target.value; };
     bce.appendChild(titleInp);
     const ta = document.createElement('textarea');
@@ -541,6 +552,7 @@ function buildBlockEditor(block, idx) {
     ta.style.marginTop = '.4rem';
     ta.oninput = ev => { e.blocks[idx].text = ev.target.value; };
     bce.appendChild(ta);
+    updNote();
   } else if (block.type === 'image') {
     const urlInp = document.createElement('input');
     urlInp.type = 'text'; urlInp.placeholder = '画像URL'; urlInp.value = block.src||'';
@@ -586,7 +598,7 @@ function addBlock(type) {
   if (type==='text')    block.content='';
   if (type==='table')   { block.markdown=TABLE_SAMPLE_MD; block.style='plain'; }
   if (type==='image')   { block.src=''; block.caption=''; }
-  if (type.startsWith('link_from_')) { block.title=''; block.text=''; }
+  if (type==='link_from') { block.target_genre=''; block.title=''; block.text=''; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
   document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

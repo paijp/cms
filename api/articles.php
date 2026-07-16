@@ -67,8 +67,6 @@ function delete_article($dir, $id) {
 }
 
 function list_articles($dir, $genre = null, $show_hidden = false) {
-    // このジャンルにクロスリンクを流し込むブロック型（例: news 一覧には link_from_news ブロックの内容を混ぜる）
-    $link_type = $genre ? ('link_from_' . $genre) : null;
     $articles = [];
     foreach (glob($dir . '*.json') as $f) {
         $a = json_decode(file_get_contents($f), true);
@@ -79,15 +77,16 @@ function list_articles($dir, $genre = null, $show_hidden = false) {
             $preview = null;
             foreach ($blocks as $b) {
                 $t = $b['type'] ?? '';
-                if ($t !== 'heading' && strpos($t, 'link_from_') !== 0) { $preview = $b; break; }
+                if ($t !== 'heading' && $t !== 'link_from') { $preview = $b; break; }
             }
             $a['blocks'] = $preview ? [$preview] : [];
             $articles[] = $a;
         }
-        // 他ジャンル記事に link_from_$genre ブロックがあれば擬似カードとして追加
-        if ($link_type && ($a['genre'] ?? '') !== $genre) {
+        // 他ジャンル記事に「link_from」ブロック(target_genre==$genre)があれば擬似カードとして追加
+        if ($genre && ($a['genre'] ?? '') !== $genre) {
             foreach ($blocks as $b) {
-                if (($b['type'] ?? '') !== $link_type) continue;
+                if (($b['type'] ?? '') !== 'link_from') continue;
+                if (($b['target_genre'] ?? '') !== $genre) continue;
                 $articles[] = [
                     'id'         => $a['id'] ?? '',
                     'genre'      => $genre,          // 一覧の表示上のジャンル
@@ -133,9 +132,12 @@ function sanitize_block($b) {
         if (!in_array($style, ['plain', 'header-dark', 'striped', 'form', 'borderless'], true)) $style = 'plain';
         return ['type' => 'table', 'markdown' => (string)($b['markdown'] ?? ''), 'style' => $style];
     }
-    // ジャンルへのクロスリンクブロック（link_from_<genre>）
-    if (is_string($b['type']) && preg_match('/^link_from_[a-zA-Z0-9_\-]+$/', $b['type'])) {
-        return ['type' => $b['type'], 'title' => (string)($b['title'] ?? ''), 'text' => (string)($b['text'] ?? '')];
+    // 他ジャンルへのクロスリンク: target_genre を1つ指定
+    if ($b['type'] === 'link_from') {
+        $tg = $b['target_genre'] ?? '';
+        if (!is_string($tg) || !preg_match('/^[a-zA-Z0-9_\-]+$/', $tg)) $tg = '';
+        return ['type' => 'link_from', 'target_genre' => $tg,
+                'title' => (string)($b['title'] ?? ''), 'text' => (string)($b['text'] ?? '')];
     }
     return null;
 }
