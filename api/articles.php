@@ -14,6 +14,7 @@
  * POST                     -> 記事作成・更新（下書きへ） ※管理者
  * POST   ?publish=1        -> 下書きを公開版へ反映 ※管理者
  * POST   ?reorder=1        -> 記事の並び順を保存 body: {"ids": [...]} ※管理者
+ * POST   ?duplicate=1&id=X -> 記事を複製（下書き） ※管理者
  * DELETE ?id=news-001      -> 記事削除（下書きから。公開時に公開版へ反映） ※管理者
  */
 require __DIR__ . '/lib.php';
@@ -66,7 +67,12 @@ function list_articles($dir, $genre = null) {
     foreach (glob($dir . '*.json') as $f) {
         $a = json_decode(file_get_contents($f), true);
         if ($genre && ($a['genre'] ?? '') !== $genre) continue;
-        $a['blocks'] = isset($a['blocks'][0]) ? [$a['blocks'][0]] : [];
+        // ダイジェスト用は「見出し以外の最初のブロック」を返す（タイトルとの重複を避ける）
+        $preview = null;
+        foreach (($a['blocks'] ?? []) as $b) {
+            if (($b['type'] ?? '') !== 'heading') { $preview = $b; break; }
+        }
+        $a['blocks'] = $preview ? [$preview] : [];
         $articles[] = $a;
     }
     usort($articles, function ($a, $b) {
@@ -166,6 +172,16 @@ if ($method === 'POST') {
     require_admin();
     if (isset($_GET['publish'])) {
         respond(publish_drafts($PUB_DIR, $DRAFT_DIR));
+    }
+    if (isset($_GET['duplicate'])) {
+        $src = load_article($DRAFT_DIR, $_GET['id'] ?? '');
+        if (!$src) respond(['error' => 'Not found'], 404);
+        $copy = $src;
+        $copy['id'] = ($src['genre'] ?? 'article') . '-' . time();
+        $copy['title'] = ($src['title'] ?? '') . ' (コピー)';
+        $copy['created_at'] = $copy['updated_at'] = date('c');
+        if (isset($src['sort'])) $copy['sort'] = $src['sort'] + 5;
+        save_article($DRAFT_DIR, $copy) ? respond($copy) : respond(['error' => 'Save failed'], 500);
     }
     $body = json_decode(file_get_contents('php://input'), true);
     if (isset($_GET['reorder'])) {

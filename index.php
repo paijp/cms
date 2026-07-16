@@ -102,6 +102,33 @@ const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
 
 let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, loading: false };
 
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  const g = p.get('g');
+  if (g && GENRES.some(x => x.key === g)) state.genre = g;
+  return { id: p.get('id') };
+}
+function pushUrl(replace) {
+  const p = new URLSearchParams();
+  p.set('g', state.genre);
+  if (state.view === 'detail' && state.current) p.set('id', state.current.id);
+  const url = '?' + p.toString();
+  const st = { view: state.view, g: state.genre, id: state.current?.id || null };
+  if (replace) history.replaceState(st, '', url);
+  else history.pushState(st, '', url);
+}
+window.addEventListener('popstate', async (ev) => {
+  const st = ev.state || {};
+  if (st.g && st.g !== state.genre) state.genre = st.g;
+  if (st.view === 'detail' && st.id) {
+    state.loading = true; state.view = 'detail'; render();
+    state.current = await apiFetch({ id: st.id });
+    state.loading = false; render();
+  } else {
+    await gotoList(true);
+  }
+});
+
 async function apiFetch(params = {}) {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(qs ? `${API}?${qs}` : API);
@@ -142,10 +169,11 @@ function renderMain() {
 }
 
 /* List */
-async function gotoList() {
+async function gotoList(noPush) {
   state.view = 'list'; state.current = null; state.loading = true; render();
   state.articles = await apiFetch({ genre: state.genre });
   state.loading = false; render();
+  if (!noPush) pushUrl(false);
 }
 
 function renderList(main) {
@@ -171,10 +199,11 @@ function renderList(main) {
 }
 
 /* Detail */
-async function gotoDetail(article) {
+async function gotoDetail(article, noPush) {
   state.view = 'detail'; state.loading = true; render();
   state.current = await apiFetch({ id: article.id });
   state.loading = false; render();
+  if (!noPush) pushUrl(false);
 }
 
 function renderDetail(main) {
@@ -183,6 +212,7 @@ function renderDetail(main) {
   const genreLabel = GENRES.find(g => g.key === a.genre)?.label || '';
   main.innerHTML = `<div class="article-detail">
     <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(a.created_at)} ・ 更新日: ${fmtDate(a.updated_at)}</div>
+    <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(a.title||'')}</h1>
     <div id="blockOutput"></div></div>`;
   const out = document.getElementById('blockOutput');
   (a.blocks||[]).forEach(b => out.appendChild(makeBlock(b)));
@@ -210,7 +240,19 @@ function makeBlock(block) {
   return div;
 }
 
-gotoList();
+/* 初期表示: URLパラメータから復元 */
+(async () => {
+  const { id } = readUrl();
+  if (id) {
+    state.view = 'detail'; state.loading = true; render();
+    state.current = await apiFetch({ id });
+    state.loading = false; render();
+    pushUrl(true);
+  } else {
+    await gotoList(true);
+    pushUrl(true);
+  }
+})();
 </script>
 </body>
 </html>

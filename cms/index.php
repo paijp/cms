@@ -226,6 +226,31 @@ const TABLE_SAMPLE_MD = `|見出し1|見出し2|見出し3|
 
 let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, editing: null, loading: false };
 
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  const g = p.get('g'); if (g && GENRES.some(x => x.key === g)) state.genre = g;
+  return { edit: p.get('edit') };
+}
+function pushUrl(replace) {
+  const p = new URLSearchParams();
+  p.set('g', state.genre);
+  if (state.view === 'editor' && state.editing) p.set('edit', state.editing.id);
+  const url = '?' + p.toString();
+  const st = { view: state.view, g: state.genre, edit: state.editing?.id || null };
+  if (replace) history.replaceState(st, '', url);
+  else history.pushState(st, '', url);
+}
+window.addEventListener('popstate', async (ev) => {
+  const st = ev.state || {};
+  if (st.g && st.g !== state.genre) state.genre = st.g;
+  if (st.view === 'editor' && st.edit) {
+    const full = await api('GET', { id: st.edit });
+    if (full) { state.editing = full; state.view = 'editor'; render(); }
+  } else {
+    await gotoList(true);
+  }
+});
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -299,10 +324,21 @@ document.getElementById('btnModalPublish').onclick = async () => {
 };
 
 /* ---- List ---- */
-async function gotoList() {
+async function gotoList(noPush) {
   state.view = 'list'; state.current = null; state.editing = null; state.loading = true; render();
   state.articles = await api('GET', { genre: state.genre });
   state.loading = false; render();
+  if (!noPush) pushUrl(false);
+}
+
+async function duplicateArticle(id) {
+  const r = await api('POST', { duplicate: 1, id });
+  if (r && r.id) {
+    showToast('複製しました');
+    await gotoList(true);
+  } else {
+    showToast('複製に失敗しました');
+  }
 }
 
 async function moveArticle(idx, dir) {
@@ -336,12 +372,14 @@ function renderList(main) {
       <div class="card-actions">
         <button class="btn-move" data-dir="up" title="上へ" ${idx===0?'disabled':''}>↑</button>
         <button class="btn-move" data-dir="down" title="下へ" ${idx===state.articles.length-1?'disabled':''}>↓</button>
+        <button class="btn-edit-card btn-dup" title="複製">⧉ 複製</button>
         <button class="btn-edit-card">✎ 編集</button>
       </div>`;
     card.querySelectorAll('.btn-move').forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); moveArticle(idx, btn.dataset.dir); };
     });
-    card.querySelector('.btn-edit-card').onclick = async (e) => {
+    card.querySelector('.btn-dup').onclick = (e) => { e.stopPropagation(); duplicateArticle(a.id); };
+    card.querySelector('.btn-edit-card:not(.btn-dup)').onclick = async (e) => {
       e.stopPropagation();
       const full = await api('GET', { id: a.id });
       gotoEditor(full);
@@ -355,11 +393,12 @@ function renderList(main) {
 }
 
 /* ---- Editor ---- */
-function gotoEditor(article) {
+function gotoEditor(article, noPush) {
   state.editing = article
     ? JSON.parse(JSON.stringify(article))
     : { id: genId(state.genre), genre: state.genre, title: '', blocks: [] };
   state.view = 'editor'; render();
+  if (!noPush) pushUrl(false);
 }
 
 function renderEditor(main) {
@@ -550,7 +589,16 @@ async function deleteArticle() {
   gotoList();
 }
 
-gotoList();
+/* 初期表示: URLパラメータから復元 */
+(async () => {
+  const { edit } = readUrl();
+  if (edit) {
+    const full = await api('GET', { id: edit });
+    if (full && full.id) { gotoEditor(full, true); pushUrl(true); return; }
+  }
+  await gotoList(true);
+  pushUrl(true);
+})();
 </script>
 </body>
 </html>
