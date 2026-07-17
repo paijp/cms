@@ -164,7 +164,7 @@ function renderGenreNav() {
 }
 
 function renderHeader() {
-  document.getElementById('logoBtn').onclick = () => gotoList();
+  document.getElementById('logoBtn').onclick = () => { state.genre = GENRES[0].key; gotoList(); };
   const el = document.getElementById('headerActions');
   el.innerHTML = state.view === 'detail'
     ? `<button class="btn-sm btn-back" id="btnBack">← 一覧へ</button>`
