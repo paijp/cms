@@ -92,6 +92,7 @@ function list_articles($dir, $genre = null, $show_hidden = false) {
                     'id'         => $a['id'] ?? '',
                     'genre'      => $genre,          // 一覧の表示上のジャンル
                     'src_genre'  => $a['genre'] ?? '',
+                    'src_title'  => $a['title'] ?? '',
                     'title'      => $b['title'] ?? ($a['title'] ?? ''),
                     'created_at' => $a['created_at'] ?? null,
                     'updated_at' => $a['updated_at'] ?? null,
@@ -222,6 +223,7 @@ if ($method === 'GET') {
             respond([
                 'src_id'       => $src['id'] ?? '',
                 'src_genre'    => $src['genre'] ?? '',
+                'src_title'    => $src['title'] ?? '',
                 'target_genre' => $target,
                 'title'        => $b['title'] ?? '',
                 'text'         => $b['text'] ?? '',

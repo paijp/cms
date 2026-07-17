@@ -171,11 +171,18 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 #toast {
   position: fixed; bottom: 1.5rem; right: 1.5rem;
   background: #1a2a3a; color: #fff;
-  padding: .72rem 1.4rem; border-radius: 6px; font-size: .88rem;
-  box-shadow: 0 4px 16px rgba(0,0,0,.2); opacity: 0; pointer-events: none;
+  padding: .55rem .55rem .55rem 1.2rem; border-radius: 24px; font-size: .88rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25); opacity: 0; pointer-events: none;
   transition: opacity .25s; z-index: 999;
+  display: flex; align-items: center; gap: .7rem;
 }
-#toast.show { opacity: 1; }
+#toast.show { opacity: 1; pointer-events: auto; }
+#toast-undo {
+  background: #f0a500; color: #1a2a3a; border: none;
+  border-radius: 18px; padding: .35rem 1rem;
+  font-size: .82rem; font-weight: 700; cursor: pointer;
+}
+#toast-undo:hover { background: #d99400; }
 footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; font-size: .78rem; padding: 1.1rem; margin-top: auto; }
 </style>
 </head>
@@ -192,7 +199,7 @@ footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; 
   <main id="main"></main>
   <footer><?= $siteName ?> CMS — 管理者専用ページ</footer>
 </div>
-<div id="toast"></div>
+<div id="toast"><span id="toast-msg"></span><button id="toast-undo" style="display:none">元に戻す</button></div>
 <div id="modalOverlay">
   <div class="modal">
     <div class="modal-header">公開前の確認 — 下書きと公開版の差分</div>
@@ -254,11 +261,23 @@ window.addEventListener('popstate', async (ev) => {
   }
 });
 
-function showToast(msg) {
+let toastTimer = null, toastUndoFn = null;
+function showToast(msg, undoFn) {
+  clearTimeout(toastTimer);
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  document.getElementById('toast-msg').textContent = msg;
+  toastUndoFn = undoFn || null;
+  document.getElementById('toast-undo').style.display = undoFn ? '' : 'none';
+  t.classList.add('show');
+  toastTimer = setTimeout(() => { t.classList.remove('show'); toastUndoFn = null; },
+                          undoFn ? 6000 : 2200);
 }
+document.getElementById('toast-undo').addEventListener('click', () => {
+  clearTimeout(toastTimer);
+  document.getElementById('toast').classList.remove('show');
+  const fn = toastUndoFn; toastUndoFn = null;
+  if (fn) fn();
+});
 async function api(method, params = {}, body = null) {
   const qs = new URLSearchParams(params).toString();
   const url = qs ? `${API}?${qs}` : API;
@@ -578,7 +597,15 @@ function buildBlockEditor(block, idx) {
     };
   });
   div.querySelector('.btn-icon[data-del]').onclick = () => {
-    e.blocks.splice(idx, 1); renderBlocksEditor();
+    const removed = e.blocks[idx];
+    const typeLabel = BLOCK_TYPES.find(bt => bt.type === removed?.type)?.label || 'ブロック';
+    e.blocks.splice(idx, 1);
+    renderBlocksEditor();
+    showToast(`${typeLabel}を削除しました`, () => {
+      e.blocks.splice(idx, 0, removed);
+      renderBlocksEditor();
+      showToast('削除を取り消しました');
+    });
   };
   return div;
 }

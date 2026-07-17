@@ -217,6 +217,7 @@ async function gotoLink(listItem, noPush) {
   state.linkDetail = {
     src_id: listItem.id,
     src_genre: listItem.src_genre,
+    src_title: listItem.src_title || '',
     title: listItem.title,
     text: listItem.blocks?.[0]?.content || '',
     created_at: listItem.created_at,
@@ -238,12 +239,12 @@ function renderLinkDetail(main) {
   const d = state.linkDetail;
   if (!d) { main.innerHTML = '<div class="empty">記事が見つかりません。</div>'; return; }
   const genreLabel = GENRES.find(g => g.key === state.genre)?.label || '';
-  const srcLabel = GENRES.find(g => g.key === d.src_genre)?.label || d.src_genre;
+  const linkText = d.src_title || (GENRES.find(g => g.key === d.src_genre)?.label || d.src_genre);
   main.innerHTML = `<div class="article-detail">
     <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(d.created_at)} ・ 更新日: ${fmtDate(d.updated_at)}</div>
     <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(d.title||'')}</h1>
     <div class="block block-text"><div class="md-body">${mdText(d.text||'', '')}</div></div>
-    <p style="margin-top:1.5rem;font-size:.95rem;">詳しくは <a href="#" id="linkToSrc" style="color:#1c6fa8;font-weight:700;text-decoration:underline">${esc(srcLabel)}</a> をご覧下さい</p>
+    <p style="margin-top:1.5rem;font-size:.95rem;">詳しくは <a href="#" id="linkToSrc" style="color:#1c6fa8;font-weight:700;text-decoration:underline">${esc(linkText)}</a> をご覧下さい</p>
   </div>`;
   document.getElementById('linkToSrc').onclick = async (ev) => {
     ev.preventDefault();
