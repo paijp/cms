@@ -567,10 +567,31 @@ function buildBlockEditor(block, idx) {
     titleInp.oninput = ev => { e.blocks[idx].title = ev.target.value; };
     bce.appendChild(titleInp);
     const ta = document.createElement('textarea');
-    ta.rows = 3; ta.placeholder = '文章'; ta.value = block.text||'';
+    ta.rows = 3; ta.placeholder = '文章（md書式対応）'; ta.value = block.text||'';
     ta.style.marginTop = '.4rem';
-    ta.oninput = ev => { e.blocks[idx].text = ev.target.value; };
     bce.appendChild(ta);
+    const bopts = document.createElement('div');
+    bopts.className = 'bold-opts';
+    bopts.innerHTML = `
+      <span class="bold-opts-label">強調（**太字**）の表示:</span>
+      <input type="text" data-k="bold_color" placeholder="文字色 (#c00)" value="${esc(block.bold_color||'')}">
+      <input type="text" data-k="bold_bg_color" placeholder="背景色 (#ff9)" value="${esc(block.bold_bg_color||'')}">
+      <input type="text" data-k="bold_ul_thick" placeholder="下線太さ (2px)" value="${esc(block.bold_ul_thick||'')}">
+      <input type="text" data-k="bold_ul_color" placeholder="下線色 (#c00)" value="${esc(block.bold_ul_color||'')}">`;
+    bce.appendChild(bopts);
+    const pv = document.createElement('div');
+    pv.className = 'md-preview';
+    bce.appendChild(pv);
+    const updPv = () => { pv.innerHTML = mdText(e.blocks[idx].text||'', boldStyleOf(e.blocks[idx])); };
+    ta.oninput = ev => { e.blocks[idx].text = ev.target.value; updPv(); };
+    bopts.querySelectorAll('input').forEach(inp => {
+      inp.oninput = ev => {
+        const v = ev.target.value.trim();
+        if (v) e.blocks[idx][inp.dataset.k] = v; else delete e.blocks[idx][inp.dataset.k];
+        updPv();
+      };
+    });
+    updPv();
     updNote();
   } else if (block.type === 'image') {
     const urlInp = document.createElement('input');

@@ -10,6 +10,9 @@
 return [
     // サイト名（トップページ・管理画面のタイトルとロゴに表示）
     'site_name' => 'サンプル株式会社',
+    // 任意: ロゴ表示用のHTML。指定すると公開ページのロゴ部分に <span class="brand-accent">
+    // などを使ってブランドの一部を強調表示できる（未設定なら site_name をそのまま表示）
+    // 'site_name_html' => '<span class="brand-accent">サンプル</span>株式会社',
 
     // フッターの表記
     'copyright' => '© 2026 サンプル株式会社',

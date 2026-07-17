@@ -4,6 +4,8 @@ header('Cache-Control: no-store');
 $cfg = cms_config();
 $isAdmin = cms_session_valid();
 $siteName = htmlspecialchars($cfg['site_name'], ENT_QUOTES);
+// ロゴ表示用: site_name_html を site.php で設定すればブランド強調（HTMLそのまま埋め込み）
+$siteNameHtml = $cfg['site_name_html'] ?? $siteName;
 $assetVer = @filemtime(__DIR__ . '/assets/cms-render.js') ?: 0;
 ?>
 <!DOCTYPE html>
@@ -26,6 +28,7 @@ header {
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .03em; cursor: pointer; }
+.logo .brand-accent { color: #f0a500; }
 .btn-sm {
   padding: .35rem .9rem; border-radius: 4px; font-size: .82rem;
   font-weight: 600; border: none; cursor: pointer; transition: background .15s;
@@ -47,7 +50,7 @@ nav.genre-nav button {
   border-bottom: 3px solid transparent; margin-bottom: -1px;
   cursor: pointer; transition: color .15s, border-color .15s;
 }
-nav.genre-nav button.active { color: #1c3557; font-weight: 700; border-bottom-color: #4ea8de; }
+nav.genre-nav button.active { color: #1c3557; font-weight: 700; border-bottom-color: #f0a500; }
 nav.genre-nav button:hover:not(.active) { color: #1c3557; }
 
 /* Main */
@@ -87,7 +90,7 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 <body>
 <div id="app">
   <header>
-    <div class="logo" id="logoBtn"><?= $siteName ?></div>
+    <div class="logo" id="logoBtn"><?= $siteNameHtml ?></div>
     <div id="headerActions"></div>
   </header>
 <?php if ($isAdmin): ?>
@@ -243,7 +246,7 @@ function renderLinkDetail(main) {
   main.innerHTML = `<div class="article-detail">
     <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(d.created_at)} ・ 更新日: ${fmtDate(d.updated_at)}</div>
     <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(d.title||'')}</h1>
-    <div class="block block-text"><div class="md-body">${mdText(d.text||'', '')}</div></div>
+    <div class="block block-text"><div class="md-body">${mdText(d.text||'', boldStyleOf(d))}</div></div>
     <p style="margin-top:1.5rem;font-size:.95rem;">詳しくは <a href="#" id="linkToSrc" style="color:#1c6fa8;font-weight:700;text-decoration:underline">${esc(linkText)}</a> をご覧下さい</p>
   </div>`;
   document.getElementById('linkToSrc').onclick = async (ev) => {

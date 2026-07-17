@@ -88,7 +88,7 @@ function list_articles($dir, $genre = null, $show_hidden = false) {
             foreach ($blocks as $b) {
                 if (($b['type'] ?? '') !== 'link_from') continue;
                 if (($b['target_genre'] ?? '') !== $genre) continue;
-                $articles[] = [
+                $cross = [
                     'id'         => $a['id'] ?? '',
                     'genre'      => $genre,          // 一覧の表示上のジャンル
                     'src_genre'  => $a['genre'] ?? '',
@@ -99,6 +99,9 @@ function list_articles($dir, $genre = null, $show_hidden = false) {
                     'cross_link' => true,
                     'blocks'     => [['type' => 'text', 'content' => $b['text'] ?? '']],
                 ];
+                foreach (['bold_color', 'bold_bg_color', 'bold_ul_thick', 'bold_ul_color'] as $k)
+                    if (!empty($b[$k])) $cross[$k] = $b[$k];
+                $articles[] = $cross;
             }
         }
     }
@@ -134,12 +137,16 @@ function sanitize_block($b) {
         if (!in_array($style, ['plain', 'header-dark', 'striped', 'form', 'borderless'], true)) $style = 'plain';
         return ['type' => 'table', 'markdown' => (string)($b['markdown'] ?? ''), 'style' => $style];
     }
-    // 他ジャンルへのクロスリンク: target_genre を1つ指定
+    // 他ジャンルへのクロスリンク: target_genre を1つ指定。強調表示属性も text ブロックと同じく保持
     if ($b['type'] === 'link_from') {
         $tg = $b['target_genre'] ?? '';
         if (!is_string($tg) || !preg_match('/^[a-zA-Z0-9_\-]+$/', $tg)) $tg = '';
-        return ['type' => 'link_from', 'target_genre' => $tg,
-                'title' => (string)($b['title'] ?? ''), 'text' => (string)($b['text'] ?? '')];
+        $o = ['type' => 'link_from', 'target_genre' => $tg,
+              'title' => (string)($b['title'] ?? ''), 'text' => (string)($b['text'] ?? '')];
+        foreach (['bold_color', 'bold_bg_color', 'bold_ul_color'] as $k)
+            if (($v = v_color($b[$k] ?? null)) !== null) $o[$k] = $v;
+        if (($v = v_length($b['bold_ul_thick'] ?? null)) !== null && $v !== '0') $o['bold_ul_thick'] = $v;
+        return $o;
     }
     return null;
 }
@@ -220,7 +227,7 @@ if ($method === 'GET') {
         foreach ($src['blocks'] ?? [] as $b) {
             if (($b['type'] ?? '') !== 'link_from') continue;
             if (($b['target_genre'] ?? '') !== $target) continue;
-            respond([
+            $r = [
                 'src_id'       => $src['id'] ?? '',
                 'src_genre'    => $src['genre'] ?? '',
                 'src_title'    => $src['title'] ?? '',
@@ -229,7 +236,10 @@ if ($method === 'GET') {
                 'text'         => $b['text'] ?? '',
                 'created_at'   => $src['created_at'] ?? null,
                 'updated_at'   => $src['updated_at'] ?? null,
-            ]);
+            ];
+            foreach (['bold_color', 'bold_bg_color', 'bold_ul_thick', 'bold_ul_color'] as $k)
+                if (!empty($b[$k])) $r[$k] = $b[$k];
+            respond($r);
         }
         respond(['error' => 'Not found'], 404);
     }
