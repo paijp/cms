@@ -304,9 +304,10 @@ function renderHeader() {
   const el = document.getElementById('headerActions');
   const viewLink = `<a href="${VIEW_BASE}" target="_blank"><button class="btn btn-sm btn-view">プレビュー ↗</button></a>`;
   if (state.view === 'list') {
-    el.innerHTML = `${viewLink} <a href="${API}?export=1" class="btn btn-sm btn-view" style="text-decoration:none;padding:.35rem .9rem;display:inline-block">⤓ エクスポート</a> <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
+    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-view" id="btnAccessLog" style="padding:.35rem .9rem">📊 アクセスログ</button> <a href="${API}?export=1" class="btn btn-sm btn-view" style="text-decoration:none;padding:.35rem .9rem;display:inline-block">⤓ エクスポート</a> <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
     document.getElementById('btnNew').onclick = () => gotoEditor(null);
     document.getElementById('btnPublish').onclick = openPublishModal;
+    document.getElementById('btnAccessLog').onclick = openAccessLog;
   } else {
     el.innerHTML = `${viewLink} <button class="btn btn-sm btn-back" id="btnBack">← 一覧へ</button>`;
     document.getElementById('btnBack').onclick = () => gotoList();
@@ -340,6 +341,17 @@ async function openPublishModal() {
   overlay.classList.add('show');
 }
 document.getElementById('btnModalClose').onclick = () => document.getElementById('modalOverlay').classList.remove('show');
+
+async function openAccessLog() {
+  const overlay = document.getElementById('modalOverlay');
+  document.querySelector('.modal-header').textContent = 'アクセスログ（過去30日）';
+  document.getElementById('diffText').textContent = '読み込み中...';
+  document.getElementById('btnModalPublish').style.display = 'none';
+  overlay.classList.add('show');
+  const res = await fetch(API + '?access_log=1&days=30');
+  const text = await res.text();
+  document.getElementById('diffText').textContent = text || '（該当データなし）';
+}
 document.getElementById('btnModalPublish').onclick = async () => {
   const r = await api('POST', { publish: 1 });
   document.getElementById('modalOverlay').classList.remove('show');
@@ -389,7 +401,7 @@ function renderList(main) {
     card.innerHTML = `
       <div class="card-body">
         <div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)} 更新: ${fmtDate(a.updated_at)}</div>
-        <div class="card-title">${a.hidden?'<span style="background:#e0e5eb;color:#555;font-size:.7rem;font-weight:700;padding:.1rem .45rem;border-radius:99px;margin-right:.4rem;vertical-align:middle">非表示</span>':''}${esc(a.title)}</div>
+        <div class="card-title"><span style="color:#888;font-size:.78rem;font-weight:500;margin-right:.4rem">#${a.short_id ?? '?'}</span>${a.hidden?'<span style="background:#e0e5eb;color:#555;font-size:.7rem;font-weight:700;padding:.1rem .45rem;border-radius:99px;margin-right:.4rem;vertical-align:middle">非表示</span>':''}${esc(a.title)}</div>
         ${preview ? `<div class="card-preview">${esc(preview)}</div>` : ''}
       </div>
       <div class="card-actions">
@@ -438,6 +450,11 @@ function renderEditor(main) {
         <label>タイトル</label>
         <input type="text" id="eTitle" value="${esc(e.title)}" placeholder="記事のタイトルを入力">
       </div>
+      <div class="form-row" style="display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+        <label style="margin:0">記事番号 (short_id)</label>
+        <input type="number" id="eShortId" min="1" style="width:6rem" value="${e.short_id ?? ''}" placeholder="自動採番">
+        <span id="eShortIdStatus" style="font-size:.8rem"></span>
+      </div>
       <div class="form-row" style="display:flex;align-items:center;gap:.5rem">
         <input type="checkbox" id="eHidden" ${e.hidden?'checked':''} style="width:auto">
         <label for="eHidden" style="margin:0;cursor:pointer">非表示（管理画面には表示されますが、公開ページには表示されません）</label>
@@ -460,6 +477,23 @@ function renderEditor(main) {
   document.getElementById('eGenre').onchange = ev => { e.genre = ev.target.value; };
   document.getElementById('eTitle').oninput  = ev => { e.title = ev.target.value; };
   document.getElementById('eHidden').onchange = ev => { e.hidden = ev.target.checked; };
+  const sidInp = document.getElementById('eShortId');
+  const sidStatus = document.getElementById('eShortIdStatus');
+  let sidTimer = null;
+  const runSidCheck = async () => {
+    const n = parseInt(sidInp.value, 10);
+    if (!n || n < 1) { sidStatus.innerHTML = '<span style="color:#888">保存時に自動採番されます</span>'; return; }
+    const r = await api('GET', { short_id_check: n, genre: e.genre, exclude: e.id });
+    const ms = r.matches || [];
+    if (ms.length === 0) sidStatus.innerHTML = `<span style="color:#1e8449">✓ #${n} は使用可能</span>`;
+    else sidStatus.innerHTML = '<span style="color:#c0392b">✗ ' + ms.map(m => `#${n} は「${esc(m.title)}」で使用中`).join(', ') + '</span>';
+  };
+  sidInp.oninput = ev => {
+    const v = parseInt(ev.target.value, 10);
+    e.short_id = (v && v >= 1) ? v : undefined;
+    clearTimeout(sidTimer); sidTimer = setTimeout(runSidCheck, 300);
+  };
+  runSidCheck();
   document.getElementById('btnSave').onclick   = saveArticle;
   document.getElementById('btnCancel').onclick = () => gotoList();
   const btnDel = document.getElementById('btnDelete');

@@ -11,6 +11,8 @@
  * GET    ?link=<id>&target=<genre> -> クロスリンクの詳細（block.title/text/元記事情報）
  * GET    ?topic=<slug>     -> 固定リンクブロックのslugが一致する記事を返す
  * GET    ?permalink_check=<slug>&exclude=<id> -> slug使用中の他記事一覧 ※管理者
+ * GET    ?short_id_check=<n>&genre=<g>&exclude=<id> -> ジャンル内でN使用中の記事一覧 ※管理者
+ * GET    ?access_log=1&days=<n> -> アクセスログ集計テキスト ※管理者
  *        ※閲覧は管理者ログイン中なら下書き版、未ログインなら公開版
  * GET    ?site=1           -> サイト情報（サイト名・ジャンル）※公開
  * GET    ?diff=1           -> 下書きと公開版のテキスト差分 ※管理者
@@ -61,6 +63,20 @@ function save_article($dir, $article) {
     if (!$id) return false;
     return file_put_contents($dir . $id . '.json',
         json_encode($article, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)) !== false;
+}
+
+function next_short_id($genre, $exclude_id, $dirs) {
+    $max = 0;
+    foreach ($dirs as $d) {
+        foreach (glob($d . '*.json') as $f) {
+            $a = json_decode(file_get_contents($f), true);
+            if (($a['id'] ?? '') === $exclude_id) continue;
+            if (($a['genre'] ?? '') !== $genre) continue;
+            $s = (int)($a['short_id'] ?? 0);
+            if ($s > $max) $max = $s;
+        }
+    }
+    return $max + 1;
 }
 
 function delete_article($dir, $id) {
@@ -114,6 +130,117 @@ function list_articles($dir, $genre = null, $show_hidden = false) {
         return strcmp($b['created_at'] ?? '', $a['created_at'] ?? '');
     });
     return $articles;
+}
+
+/* ---- アクセスログ集計 ---- */
+function _log_short_ua($ua) {
+    if (preg_match('/(Edg|OPR|Chrome|Firefox|Safari)\/(\d+)/', $ua, $m)) return $m[1] . '/' . $m[2];
+    if (preg_match('/(bot|spider|crawler)/i', $ua)) {
+        if (preg_match('/([A-Za-z][\w\.\-]*[Bb]ot)/', $ua, $m)) return $m[1];
+        return 'bot';
+    }
+    return strlen($ua) > 40 ? substr($ua, 0, 40) . '…' : $ua;
+}
+
+function _log_page_label($path, $short_map) {
+    $u = parse_url($path);
+    if (!isset($u['path'])) return null;
+    parse_str($u['query'] ?? '', $q);
+    if ($u['path'] === '/') {
+        if (isset($q['topic']))     return 'topic:' . $q['topic'];
+        if (isset($q['id'])) {
+            $m = $short_map[$q['id']] ?? null;
+            return $m ? ($m['genre'] . '/' . $m['short_id']) : (($q['g'] ?? '?') . '/?');
+        }
+        if (isset($q['link']))      return ($q['g'] ?? '?') . '/link';
+        if (isset($q['g']))         return $q['g'] . '/0';
+        return 'top/0';
+    }
+    if ($u['path'] === '/api/articles.php') {
+        if (isset($q['site']) || isset($q['diff']) || isset($q['permalink_check'])
+            || isset($q['short_id_check']) || isset($q['export']) || isset($q['access_log'])) return null;
+        if (isset($q['topic']))     return 'topic:' . $q['topic'];
+        if (isset($q['id'])) {
+            $m = $short_map[$q['id']] ?? null;
+            return $m ? ($m['genre'] . '/' . $m['short_id']) : '?/?';
+        }
+        if (isset($q['link']))      return ($q['target'] ?? '?') . '/link';
+        if (isset($q['genre']))     return $q['genre'] . '/0';
+        return null;
+    }
+    return null;
+}
+
+function build_access_report($draft_dir, $days = 30, $gap_min = 30) {
+    // 記事ID -> ジャンル/short_id 対応表
+    $short_map = [];
+    foreach (glob($draft_dir . '*.json') as $f) {
+        $a = json_decode(file_get_contents($f), true);
+        $short_map[$a['id'] ?? ''] = ['genre' => $a['genre'] ?? '', 'short_id' => (int)($a['short_id'] ?? 0)];
+    }
+    $log = '/var/log/nginx/access.log';
+    $fh = @fopen($log, 'r');
+    if (!$fh) return "アクセスログを読み取れません: $log\n";
+    $threshold = time() - $days * 86400;
+    $events = [];
+    while (($line = fgets($fh)) !== false) {
+        if (!preg_match('/^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) HTTP\/[\d\.]+" (\d+) \S+ "[^"]*" "([^"]*)"/', $line, $m)) continue;
+        [$_, $ip, $ts, $method, $path, $status, $ua] = $m;
+        if ($method !== 'GET') continue;
+        if ($status[0] !== '2' && $status[0] !== '3') continue;
+        $t = DateTime::createFromFormat('d/M/Y:H:i:s O', $ts);
+        if (!$t || $t->getTimestamp() < $threshold) continue;
+        $label = _log_page_label($path, $short_map);
+        if ($label === null) continue;
+        $events[] = ['ts' => $t->getTimestamp(), 'ip' => $ip, 'ua' => _log_short_ua($ua), 'label' => $label];
+    }
+    fclose($fh);
+    // (ip, ua) でグルーピング → ギャップでセッション区切り
+    usort($events, function ($a, $b) {
+        return [$a['ip'], $a['ua'], $a['ts']] <=> [$b['ip'], $b['ua'], $b['ts']];
+    });
+    $sessions = [];
+    $current = [];
+    $prev_key = null;
+    $prev_ts = null;
+    foreach ($events as $e) {
+        $k = $e['ip'] . '|' . $e['ua'];
+        if ($k !== $prev_key || ($prev_ts !== null && $e['ts'] - $prev_ts > $gap_min * 60)) {
+            if ($current) $sessions[] = $current;
+            $current = [];
+        }
+        $current[] = $e;
+        $prev_key = $k;
+        $prev_ts = $e['ts'];
+    }
+    if ($current) $sessions[] = $current;
+    // 開始時刻順(降順=新しい順)
+    usort($sessions, function ($a, $b) { return $b[0]['ts'] <=> $a[0]['ts']; });
+    // 日付ごとにまとめて出力
+    $out = '';
+    $cur_date = '';
+    foreach ($sessions as $s) {
+        $date = date('Y-m-d', $s[0]['ts']);
+        if ($date !== $cur_date) {
+            if ($cur_date !== '') $out .= "\n";
+            $out .= "** $date\n";
+            $cur_date = $date;
+        }
+        $time = date('H:i', $s[0]['ts']);
+        // ラベル列に (秒数) を挿入。連続する同一ページは省略
+        $parts = [];
+        $prev_label = null;
+        $prev_ts = null;
+        foreach ($s as $e) {
+            if ($e['label'] === $prev_label) continue;
+            if ($prev_ts !== null) $parts[count($parts) - 1] .= '(' . ($e['ts'] - $prev_ts) . ')';
+            $parts[] = $e['label'];
+            $prev_label = $e['label'];
+            $prev_ts = $e['ts'];
+        }
+        $out .= "$time " . implode('', $parts) . "\n";
+    }
+    return $out;
 }
 
 /* ---- ブロックのサニタイズ ---- */
@@ -238,6 +365,28 @@ if ($method === 'GET') {
         }
         respond(['error' => 'Not found'], 404);
     }
+    if (isset($_GET['short_id_check'])) {
+        require_admin();
+        $sn = (int)$_GET['short_id_check'];
+        $genre = $_GET['genre'] ?? '';
+        $exclude = $_GET['exclude'] ?? '';
+        $matches = [];
+        foreach (glob($DRAFT_DIR . '*.json') as $f) {
+            $a = json_decode(file_get_contents($f), true);
+            if (($a['id'] ?? '') === $exclude) continue;
+            if (($a['genre'] ?? '') !== $genre) continue;
+            if ((int)($a['short_id'] ?? 0) === $sn) {
+                $matches[] = ['id' => $a['id'] ?? '', 'title' => $a['title'] ?? ''];
+            }
+        }
+        respond(['matches' => $matches]);
+    }
+    if (isset($_GET['access_log'])) {
+        require_admin();
+        header('Content-Type: text/plain; charset=utf-8');
+        echo build_access_report($DRAFT_DIR, (int)($_GET['days'] ?? 30), (int)($_GET['gap'] ?? 30));
+        exit;
+    }
     if (isset($_GET['permalink_check'])) {
         require_admin();
         $slug = $_GET['permalink_check'];
@@ -326,6 +475,11 @@ if ($method === 'POST') {
     }
     $body['updated_at'] = $now;
     $body['hidden'] = !empty($body['hidden']);
+    // short_id: 明示指定があればそれを、無ければ既存維持、それも無ければジャンル内で最大+1を採番
+    $sid = isset($body['short_id']) ? (int)$body['short_id'] : 0;
+    if ($sid <= 0) $sid = (int)($existing['short_id'] ?? 0);
+    if ($sid <= 0) $sid = next_short_id($body['genre'], $body['id'], [$PUB_DIR, $DRAFT_DIR]);
+    $body['short_id'] = $sid;
     $body['blocks'] = sanitize_blocks($body['blocks'] ?? []);
     save_article($DRAFT_DIR, $body) ? respond($body) : respond(['error' => 'Save failed'], 500);
 }
