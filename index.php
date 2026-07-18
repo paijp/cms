@@ -1,8 +1,31 @@
 <?php
 require __DIR__ . '/api/lib.php';
-header('Cache-Control: no-store');
 $cfg = cms_config();
 $isAdmin = cms_session_valid();
+
+// 固定リンク(?topic=<slug>) は該当記事へ302リダイレクト（広告のランディングページなどで利用可）
+if (isset($_GET['topic'])) {
+    $slug = (string)$_GET['topic'];
+    if (preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $slug)) {
+        $dir = rtrim($cfg[$isAdmin ? 'drafts_dir' : 'data_dir'], '/') . '/';
+        foreach (glob($dir . '*.json') as $f) {
+            $a = json_decode(file_get_contents($f), true);
+            if (!$isAdmin && !empty($a['hidden'])) continue;
+            foreach (($a['blocks'] ?? []) as $b) {
+                if (($b['type'] ?? '') !== 'permalink') continue;
+                if (($b['slug'] ?? '') !== $slug) continue;
+                header('Location: /?g=' . urlencode($a['genre'] ?? '') . '&id=' . urlencode($a['id'] ?? ''), true, 302);
+                exit;
+            }
+        }
+    }
+    http_response_code(404);
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!DOCTYPE html><html lang="ja"><meta charset="UTF-8"><title>404</title><body style="font-family:sans-serif;text-align:center;padding:4rem;color:#555"><h1>404</h1><p>指定の記事は見つかりませんでした。</p><p><a href="/">トップページへ</a></p></body></html>';
+    exit;
+}
+
+header('Cache-Control: no-store');
 $siteName = htmlspecialchars($cfg['site_name'], ENT_QUOTES);
 // ロゴ表示用: site_name_html を site.php で設定すればブランド強調（HTMLそのまま埋め込み）
 $siteNameHtml = $cfg['site_name_html'] ?? $siteName;
