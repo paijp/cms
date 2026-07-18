@@ -222,6 +222,7 @@ const BLOCK_TYPES = [
   { type: 'table',     label: '表' },
   { type: 'image',     label: '画像' },
   { type: 'link_from', label: '他ジャンルからリンク' },
+  { type: 'permalink', label: '固定リンク' },
 ];
 const TABLE_STYLE_OPTIONS = [
   { value: 'plain',       label: '標準' },
@@ -544,6 +545,44 @@ function buildBlockEditor(block, idx) {
     ta.oninput = ev => { e.blocks[idx].markdown = ev.target.value; upd(); };
     opts.querySelector('select').onchange = ev => { e.blocks[idx].style = ev.target.value; upd(); };
     upd();
+  } else if (block.type === 'permalink') {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:.78rem;color:#666;margin-bottom:.5rem;padding:.4rem .6rem;background:#fffbf0;border:1px dashed #f0a500;border-radius:4px';
+    note.innerHTML = 'このブロックは記事には表示されません。ここで指定した文字列で <strong>/?topic=&lt;文字列&gt;</strong> の短いURLでこの記事を開けるようになります。';
+    bce.appendChild(note);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = '固定リンク文字列 (半角英数字・アンダースコア・ハイフン、1〜64字)';
+    inp.value = block.slug || '';
+    bce.appendChild(inp);
+    const status = document.createElement('div');
+    status.style.cssText = 'font-size:.8rem;margin-top:.4rem;';
+    bce.appendChild(status);
+    let checkTimer = null;
+    const runCheck = async () => {
+      const slug = (e.blocks[idx].slug || '').trim();
+      if (!slug) { status.innerHTML = ''; return; }
+      if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(slug)) {
+        status.innerHTML = '<span style="color:#c0392b">✗ 使用できない文字が含まれています</span>';
+        return;
+      }
+      status.innerHTML = '<span style="color:#888">確認中…</span>';
+      const r = await api('GET', { permalink_check: slug, exclude: e.id, include_hidden: 1 });
+      const ms = r.matches || [];
+      if (ms.length === 0) {
+        status.innerHTML = `<span style="color:#1e8449">✓ 使用可能 · 公開URL: <code>/?topic=${esc(slug)}</code></span>`;
+      } else {
+        status.innerHTML = '<span style="color:#c0392b">✗ 既に使用中:</span> ' + ms.map(m =>
+          `<span style="color:#c0392b">「${esc(m.title || m.id)}」</span>`
+        ).join(', ');
+      }
+    };
+    inp.oninput = ev => {
+      e.blocks[idx].slug = ev.target.value.trim();
+      clearTimeout(checkTimer);
+      checkTimer = setTimeout(runCheck, 300);
+    };
+    runCheck();
   } else if (block.type === 'link_from') {
     const note = document.createElement('div');
     note.style.cssText = 'font-size:.78rem;color:#666;margin-bottom:.5rem;padding:.4rem .6rem;background:#fffbf0;border:1px dashed #f0a500;border-radius:4px';
@@ -647,6 +686,7 @@ function addBlock(type) {
   if (type==='table')   { block.markdown=TABLE_SAMPLE_MD; block.style='plain'; }
   if (type==='image')   { block.src=''; block.caption=''; }
   if (type==='link_from') { block.target_genre=''; block.title=''; block.text=''; }
+  if (type==='permalink') { block.slug=''; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
   document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

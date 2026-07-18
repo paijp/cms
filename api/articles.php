@@ -9,6 +9,8 @@
  * GET    ?genre=news       -> 記事一覧（先頭ブロックのみ）
  * GET    ?id=news-001      -> 記事詳細（全ブロック）
  * GET    ?link=<id>&target=<genre> -> クロスリンクの詳細（block.title/text/元記事情報）
+ * GET    ?topic=<slug>     -> 固定リンクブロックのslugが一致する記事を返す
+ * GET    ?permalink_check=<slug>&exclude=<id> -> slug使用中の他記事一覧 ※管理者
  *        ※閲覧は管理者ログイン中なら下書き版、未ログインなら公開版
  * GET    ?site=1           -> サイト情報（サイト名・ジャンル）※公開
  * GET    ?diff=1           -> 下書きと公開版のテキスト差分 ※管理者
@@ -78,7 +80,7 @@ function list_articles($dir, $genre = null, $show_hidden = false) {
             $preview = null;
             foreach ($blocks as $b) {
                 $t = $b['type'] ?? '';
-                if ($t !== 'heading' && $t !== 'link_from') { $preview = $b; break; }
+                if ($t !== 'heading' && $t !== 'link_from' && $t !== 'permalink') { $preview = $b; break; }
             }
             $a['blocks'] = $preview ? [$preview] : [];
             $articles[] = $a;
@@ -131,6 +133,12 @@ function sanitize_block($b) {
             if (($v = v_color($b[$k] ?? null)) !== null) $o[$k] = $v;
         if (($v = v_length($b['bold_ul_thick'] ?? null)) !== null && $v !== '0') $o['bold_ul_thick'] = $v;
         return $o;
+    }
+    // 固定リンクブロック: 記事に永続slugを付与（詳細ページには非表示）
+    if ($b['type'] === 'permalink') {
+        $slug = (string)($b['slug'] ?? '');
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $slug)) $slug = '';
+        return ['type' => 'permalink', 'slug' => $slug];
     }
     if ($b['type'] === 'table') {
         $style = $b['style'] ?? 'plain';
@@ -218,6 +226,34 @@ if ($method === 'GET') {
             'drafts'      => $dump($DRAFT_DIR),
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
+    }
+    if (isset($_GET['topic'])) {
+        $slug = $_GET['topic'];
+        foreach (glob($READ_DIR . '*.json') as $f) {
+            $a = json_decode(file_get_contents($f), true);
+            if (!$SHOW_HIDDEN && !empty($a['hidden'])) continue;
+            foreach ($a['blocks'] ?? [] as $b) {
+                if (($b['type'] ?? '') === 'permalink' && ($b['slug'] ?? '') === $slug) respond($a);
+            }
+        }
+        respond(['error' => 'Not found'], 404);
+    }
+    if (isset($_GET['permalink_check'])) {
+        require_admin();
+        $slug = $_GET['permalink_check'];
+        $exclude = $_GET['exclude'] ?? '';
+        $matches = [];
+        foreach (glob($DRAFT_DIR . '*.json') as $f) {
+            $a = json_decode(file_get_contents($f), true);
+            if (($a['id'] ?? '') === $exclude) continue;
+            foreach ($a['blocks'] ?? [] as $b) {
+                if (($b['type'] ?? '') === 'permalink' && ($b['slug'] ?? '') === $slug) {
+                    $matches[] = ['id' => $a['id'] ?? '', 'title' => $a['title'] ?? '', 'genre' => $a['genre'] ?? ''];
+                    break;
+                }
+            }
+        }
+        respond(['matches' => $matches]);
     }
     if (isset($_GET['link'])) {
         $src = load_article($READ_DIR, $_GET['link']);

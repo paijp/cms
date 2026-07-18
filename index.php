@@ -105,24 +105,30 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 const API = '/api/articles.php';
 const GENRES = <?= json_encode($cfg['genres'], JSON_UNESCAPED_UNICODE) ?>;
 
-let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, linkDetail: null, loading: false };
+let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, linkDetail: null, topic: null, loading: false };
 
 function readUrl() {
   const p = new URLSearchParams(location.search);
   const g = p.get('g');
   if (g && GENRES.some(x => x.key === g)) state.genre = g;
-  return { id: p.get('id'), link: p.get('link') };
+  return { id: p.get('id'), link: p.get('link'), topic: p.get('topic') };
 }
 function pushUrl(replace) {
   const p = new URLSearchParams();
-  p.set('g', state.genre);
-  if (state.view === 'detail' && state.current) p.set('id', state.current.id);
-  if (state.view === 'link_detail' && state.linkDetail) p.set('link', state.linkDetail.src_id);
+  // topic (permalink) が有効なら g/id は付けず短いURLで保持する
+  if (state.topic) {
+    p.set('topic', state.topic);
+  } else {
+    p.set('g', state.genre);
+    if (state.view === 'detail' && state.current) p.set('id', state.current.id);
+    if (state.view === 'link_detail' && state.linkDetail) p.set('link', state.linkDetail.src_id);
+  }
   const url = '?' + p.toString();
   const st = {
     view: state.view, g: state.genre,
     id: state.current?.id || null,
     link: state.linkDetail?.src_id || null,
+    topic: state.topic || null,
   };
   if (replace) history.replaceState(st, '', url);
   else history.pushState(st, '', url);
@@ -130,7 +136,10 @@ function pushUrl(replace) {
 window.addEventListener('popstate', async (ev) => {
   const st = ev.state || {};
   if (st.g && st.g !== state.genre) state.genre = st.g;
-  if (st.view === 'link_detail' && st.link) {
+  state.topic = st.topic || null;
+  if (state.topic) {
+    await gotoTopic(state.topic, true);
+  } else if (st.view === 'link_detail' && st.link) {
     await gotoLinkById(st.link, true);
   } else if (st.view === 'detail' && st.id) {
     state.loading = true; state.view = 'detail'; render();
@@ -140,6 +149,21 @@ window.addEventListener('popstate', async (ev) => {
     await gotoList(true);
   }
 });
+
+async function gotoTopic(slug, noPush) {
+  state.view = 'detail'; state.loading = true; state.topic = slug; render();
+  const a = await apiFetch({ topic: slug });
+  state.loading = false;
+  if (!a || a.error) {
+    state.topic = null; state.current = null;
+    document.getElementById('main').innerHTML = '<div class="empty">記事が見つかりません。</div>';
+    return;
+  }
+  state.current = a;
+  if (a.genre) state.genre = a.genre;
+  render();
+  if (!noPush) pushUrl(false);
+}
 
 async function apiFetch(params = {}) {
   const qs = new URLSearchParams(params).toString();
@@ -183,7 +207,7 @@ function renderMain() {
 
 /* List */
 async function gotoList(noPush) {
-  state.view = 'list'; state.current = null; state.loading = true; render();
+  state.view = 'list'; state.current = null; state.topic = null; state.loading = true; render();
   state.articles = await apiFetch({ genre: state.genre });
   state.loading = false; render();
   if (!noPush) pushUrl(false);
@@ -216,7 +240,7 @@ function renderList(main) {
 
 /* Cross-link detail */
 async function gotoLink(listItem, noPush) {
-  state.view = 'link_detail';
+  state.view = 'link_detail'; state.topic = null;
   state.linkDetail = {
     src_id: listItem.id,
     src_genre: listItem.src_genre,
@@ -261,7 +285,7 @@ function renderLinkDetail(main) {
 
 /* Detail */
 async function gotoDetail(article, noPush) {
-  state.view = 'detail'; state.loading = true; render();
+  state.view = 'detail'; state.topic = null; state.loading = true; render();
   state.current = await apiFetch({ id: article.id });
   state.loading = false; render();
   if (!noPush) pushUrl(false);
@@ -277,8 +301,8 @@ function renderDetail(main) {
     <div id="blockOutput"></div></div>`;
   const out = document.getElementById('blockOutput');
   (a.blocks||[]).forEach(b => {
-    // 元記事を開いたとき、クロスリンクブロックはこのページには表示しない
-    if (b.type === 'link_from') return;
+    // 元記事を開いたとき、クロスリンク/固定リンクブロックはこのページには表示しない
+    if (b.type === 'link_from' || b.type === 'permalink') return;
     out.appendChild(makeBlock(b));
   });
 }
@@ -307,8 +331,11 @@ function makeBlock(block) {
 
 /* 初期表示: URLパラメータから復元 */
 (async () => {
-  const { id, link } = readUrl();
-  if (link) {
+  const { id, link, topic } = readUrl();
+  if (topic) {
+    await gotoTopic(topic, true);
+    pushUrl(true);
+  } else if (link) {
     await gotoLinkById(link, true);
     pushUrl(true);
   } else if (id) {
