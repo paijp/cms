@@ -5,7 +5,7 @@ articles/ と drafts/ の両方に同じ ID の記事がある場合、両方に
 既に short_id が付いている記事は上書きしない。
 
 使い方:
-  ./tools/assign-short-ids.py --data-dir /var/www/kimoken-cms/data
+  ./tools/assign-short-ids.py --data-dir /path/to/cms/data
 """
 import argparse, glob, json, os, sys
 from collections import defaultdict
