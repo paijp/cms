@@ -186,13 +186,25 @@ function build_access_report($draft_dir, $days = 30, $gap_min = 30) {
     while (($line = fgets($fh)) !== false) {
         if (!preg_match('/^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) HTTP\/[\d\.]+" (\d+) \S+ "[^"]*" "([^"]*)"/', $line, $m)) continue;
         [$_, $ip, $ts, $method, $path, $status, $ua] = $m;
-        if ($method !== 'GET') continue;
         if ($status[0] !== '2' && $status[0] !== '3') continue;
         $t = DateTime::createFromFormat('d/M/Y:H:i:s O', $ts);
         if (!$t || $t->getTimestamp() < $threshold) continue;
+        // 管理者を示すマーカー: /cms/ / POST / DELETE / 管理者専用GETエンドポイント
+        $u = parse_url($path);
+        parse_str($u['query'] ?? '', $q);
+        $is_admin = ($method !== 'GET')
+            || (isset($u['path']) && strpos($u['path'], '/cms/') === 0)
+            || isset($q['diff']) || isset($q['publish']) || isset($q['export'])
+            || isset($q['permalink_check']) || isset($q['short_id_check'])
+            || isset($q['access_log']) || isset($q['reorder']) || isset($q['duplicate'])
+            || isset($q['include_hidden']);
         $label = _log_page_label($path, $short_map);
-        if ($label === null) continue;
-        $events[] = ['ts' => $t->getTimestamp(), 'ip' => $ip, 'ua' => _log_short_ua($ua), 'label' => $label];
+        if ($method === 'GET' && $label !== null) {
+            $events[] = ['ts' => $t->getTimestamp(), 'ip' => $ip, 'ua' => _log_short_ua($ua), 'label' => $label, 'admin' => $is_admin];
+        } elseif ($is_admin) {
+            // GET以外や管理系リクエストで、ページラベルは付かないがセッションを管理者と印付けるためのマーカー
+            $events[] = ['ts' => $t->getTimestamp(), 'ip' => $ip, 'ua' => _log_short_ua($ua), 'label' => null, 'admin' => true];
+        }
     }
     fclose($fh);
     // (ip, ua) でグルーピング → ギャップでセッション区切り
@@ -220,6 +232,10 @@ function build_access_report($draft_dir, $days = 30, $gap_min = 30) {
     $out = '';
     $cur_date = '';
     foreach ($sessions as $s) {
+        // マーカーのみ(ラベルなし)しかないセッションはスキップ
+        $has_label = false;
+        foreach ($s as $e) if ($e['label'] !== null) { $has_label = true; break; }
+        if (!$has_label) continue;
         $date = date('Y-m-d', $s[0]['ts']);
         if ($date !== $cur_date) {
             if ($cur_date !== '') $out .= "\n";
@@ -227,18 +243,22 @@ function build_access_report($draft_dir, $days = 30, $gap_min = 30) {
             $cur_date = $date;
         }
         $time = date('H:i', $s[0]['ts']);
-        // ラベル列に (秒数) を挿入。連続する同一ページは省略
+        // セッション内に管理者マーカーが1つでもあれば [admin] を付与
+        $admin = false;
+        foreach ($s as $e) if (!empty($e['admin'])) { $admin = true; break; }
+        $prefix = $admin ? '[admin] ' : '';
+        // ラベル列に (秒数) を挿入。連続する同一ページ/ラベルなしは省略
         $parts = [];
         $prev_label = null;
         $prev_ts = null;
         foreach ($s as $e) {
-            if ($e['label'] === $prev_label) continue;
+            if ($e['label'] === null || $e['label'] === $prev_label) continue;
             if ($prev_ts !== null) $parts[count($parts) - 1] .= '(' . ($e['ts'] - $prev_ts) . ')';
             $parts[] = $e['label'];
             $prev_label = $e['label'];
             $prev_ts = $e['ts'];
         }
-        $out .= "$time " . implode('', $parts) . "\n";
+        $out .= "$time {$prefix}" . implode('', $parts) . "\n";
     }
     return $out;
 }
