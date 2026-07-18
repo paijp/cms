@@ -26,7 +26,14 @@ function boldStyleOf(b) {
 function mdInline(t, bs) {
   t = esc(t);
   const sa = bs ? ` style="${esc(bs)}"` : '';
-  return t.replace(/\*\*([^*\n]+?)\*\*/g, (m, g) => `<strong${sa}>${g}</strong>`);
+  t = t.replace(/\*\*([^*\n]+?)\*\*/g, (m, g) => `<strong${sa}>${g}</strong>`);
+  // http/https の裸URLを自動リンク化。行末の句読点や閉じ括弧は含めない
+  return t.replace(/https?:\/\/[^\s<>"'（）]+/g, (m) => {
+    const trail = m.match(/[.,!?;:)]+$/);
+    const url = trail ? m.slice(0, -trail[0].length) : m;
+    const rest = trail ? trail[0] : '';
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${rest}`;
+  });
 }
 function mdText(text, bs) {
   const lines = String(text || '').split('\n');
