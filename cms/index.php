@@ -761,10 +761,16 @@ function uploadImageForBlock(idx, bce) {
     if (!f) return;
     const fd = new FormData();
     fd.append('file', f);
+    showToast('アップロード中… (' + Math.round(f.size/1024) + 'KB)');
     try {
       const res = await fetch(UPLOAD_API, { method: 'POST', body: fd, credentials: 'same-origin' });
-      const j = await res.json();
-      if (!res.ok) { showToast('アップロード失敗: ' + (j.error||res.status)); return; }
+      const txt = await res.text();
+      let j = null; try { j = JSON.parse(txt); } catch (_) {}
+      if (!res.ok) {
+        const msg = j?.error || (res.status === 413 ? 'ファイルが大きすぎます' : `HTTP ${res.status}`);
+        showToast('アップロード失敗: ' + msg);
+        return;
+      }
       setImageBlockSrc(idx, bce, j.url);
       showToast('アップロードしました');
     } catch (err) {

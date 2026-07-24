@@ -34,7 +34,7 @@ $ALLOWED = [
     'image/gif'  => 'gif',
     'image/webp' => 'webp',
 ];
-$MAX_BYTES = 20 * 1024 * 1024;
+$MAX_BYTES = 25 * 1024 * 1024;
 
 $method = $_SERVER['REQUEST_METHOD'];
 
