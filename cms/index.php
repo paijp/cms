@@ -210,6 +210,15 @@ footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; 
     </div>
   </div>
 </div>
+<div id="imgPickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:8px;width:90%;max-width:800px;max-height:85vh;display:flex;flex-direction:column;">
+    <div style="padding:1rem 1.5rem;font-weight:700;color:#1a2a3a;border-bottom:1px solid #dde2ea;">アップロード済み画像から選択</div>
+    <div id="imgPickerBody" style="padding:1rem;overflow:auto;flex:1;"></div>
+    <div style="padding:.9rem 1.5rem;border-top:1px solid #dde2ea;display:flex;justify-content:flex-end;">
+      <button class="btn btn-cancel" id="btnImgPickerClose" style="padding:.5rem 1.2rem">閉じる</button>
+    </div>
+  </div>
+</div>
 
 <script src="/assets/cms-render.js?v=<?= $assetVer ?>"></script>
 <script>
@@ -667,9 +676,21 @@ function buildBlockEditor(block, idx) {
     updPv();
     updNote();
   } else if (block.type === 'image') {
+    const urlRow = document.createElement('div');
+    urlRow.style.cssText = 'display:flex;gap:.35rem;align-items:stretch;';
     const urlInp = document.createElement('input');
     urlInp.type = 'text'; urlInp.placeholder = '画像URL'; urlInp.value = block.src||'';
+    urlInp.style.flex = '1';
     urlInp.oninput = ev => { e.blocks[idx].src = ev.target.value; refreshImgPreview(bce, idx); };
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button'; upBtn.textContent = '📤 アップロード';
+    upBtn.style.cssText = 'padding:.3rem .7rem;border:1px solid #ccc;background:#f8f8f8;border-radius:4px;cursor:pointer;font-size:.83rem;white-space:nowrap;';
+    upBtn.onclick = () => uploadImageForBlock(idx, bce);
+    const pickBtn = document.createElement('button');
+    pickBtn.type = 'button'; pickBtn.textContent = '📁 選択';
+    pickBtn.style.cssText = upBtn.style.cssText;
+    pickBtn.onclick = () => openImagePicker(idx, bce);
+    urlRow.appendChild(urlInp); urlRow.appendChild(upBtn); urlRow.appendChild(pickBtn);
     const capInp = document.createElement('input');
     capInp.type = 'text'; capInp.placeholder = 'キャプション（省略可）'; capInp.value = block.caption||'';
     capInp.style.marginTop = '.4rem';
@@ -682,7 +703,7 @@ function buildBlockEditor(block, idx) {
       const v = ev.target.value;
       if (v) e.blocks[idx].decoration = v; else delete e.blocks[idx].decoration;
     };
-    bce.appendChild(urlInp); bce.appendChild(capInp); bce.appendChild(decSel);
+    bce.appendChild(urlRow); bce.appendChild(capInp); bce.appendChild(decSel);
     if (block.src) {
       const img = document.createElement('img');
       img.src = block.src; img.className = 'img-preview';
@@ -720,6 +741,91 @@ function refreshImgPreview(bce, idx) {
     img.src = src;
   } else if (img) { img.remove(); }
 }
+
+/* ---- 画像アップロード / ピッカー ---- */
+const UPLOAD_API = '/api/uploads.php';
+
+function setImageBlockSrc(idx, bce, url) {
+  state.editing.blocks[idx].src = url;
+  const urlInp = bce.querySelector('input[type=text]');
+  if (urlInp) urlInp.value = url;
+  refreshImgPreview(bce, idx);
+}
+
+function uploadImageForBlock(idx, bce) {
+  const fi = document.createElement('input');
+  fi.type = 'file';
+  fi.accept = 'image/jpeg,image/png,image/gif,image/webp';
+  fi.onchange = async () => {
+    const f = fi.files?.[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const res = await fetch(UPLOAD_API, { method: 'POST', body: fd, credentials: 'same-origin' });
+      const j = await res.json();
+      if (!res.ok) { showToast('アップロード失敗: ' + (j.error||res.status)); return; }
+      setImageBlockSrc(idx, bce, j.url);
+      showToast('アップロードしました');
+    } catch (err) {
+      showToast('アップロード失敗: ' + err.message);
+    }
+  };
+  fi.click();
+}
+
+async function openImagePicker(idx, bce) {
+  const overlay = document.getElementById('imgPickerOverlay');
+  const body = document.getElementById('imgPickerBody');
+  body.innerHTML = '<div style="color:#888;text-align:center;padding:2rem;">読み込み中…</div>';
+  overlay.style.display = 'flex';
+  let files = [];
+  try {
+    const res = await fetch(UPLOAD_API, { credentials: 'same-origin' });
+    const j = await res.json();
+    files = j.files || [];
+  } catch (err) {
+    body.innerHTML = '<div style="color:#c33;">読み込みに失敗しました</div>';
+    return;
+  }
+  if (!files.length) {
+    body.innerHTML = '<div style="color:#888;text-align:center;padding:2rem;">アップロード済み画像はありません</div>';
+    return;
+  }
+  body.innerHTML = '<div id="imgPickerGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.7rem;"></div>';
+  const grid = document.getElementById('imgPickerGrid');
+  files.forEach(f => {
+    const tile = document.createElement('div');
+    tile.style.cssText = 'position:relative;border:1px solid #ddd;border-radius:4px;overflow:hidden;background:#fafafa;';
+    const kb = Math.round(f.size/1024);
+    const dim = (f.width && f.height) ? `${f.width}×${f.height}` : '';
+    tile.innerHTML = `
+      <img src="${f.url}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;">
+      <div style="font-size:.7rem;color:#666;padding:.3rem .4rem;display:flex;justify-content:space-between;">
+        <span>${dim}</span><span>${kb}KB</span>
+      </div>
+      <button type="button" title="削除" style="position:absolute;top:.2rem;right:.2rem;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:99px;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">×</button>
+    `;
+    tile.querySelector('img').onclick = () => {
+      setImageBlockSrc(idx, bce, f.url);
+      overlay.style.display = 'none';
+    };
+    tile.querySelector('button').onclick = async () => {
+      if (!confirm('この画像を削除しますか？（記事から参照されていても削除されます）')) return;
+      const res = await fetch(UPLOAD_API + '?filename=' + encodeURIComponent(f.filename), {
+        method: 'DELETE', credentials: 'same-origin'
+      });
+      if (res.ok) { tile.remove(); showToast('削除しました'); }
+      else { showToast('削除失敗'); }
+    };
+    grid.appendChild(tile);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btnImgPickerClose');
+  if (btn) btn.onclick = () => { document.getElementById('imgPickerOverlay').style.display = 'none'; };
+});
 
 function addBlock(type) {
   const block = { type };

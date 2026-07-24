@@ -34,4 +34,11 @@ return [
 
     // ログインセッションの保存先
     'session_dir' => '/var/www/example-cms/sessions/',
+
+    // アップロード画像の保存先（バックアップ対象外の場所を推奨）
+    'upload_dir'  => '/var/www/example-cms/uploads/',
+    // アップロード画像を配信する公開URL（nginx alias または docroot 下の symlink で紐付け）
+    // 例: nginx で   location /uploads/ { alias /var/www/example-cms/uploads/; }
+    //     もしくは   ln -s /var/www/example-cms/uploads /var/www/html/uploads
+    'upload_url'  => '/uploads/',
 ];
