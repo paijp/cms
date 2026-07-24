@@ -410,7 +410,7 @@ function renderList(main) {
     card.innerHTML = `
       <div class="card-body">
         <div class="card-meta">${esc(genreLabel)} ・ ${fmtDate(a.created_at)} 更新: ${fmtDate(a.updated_at)}</div>
-        <div class="card-title"><span style="color:#888;font-size:.78rem;font-weight:500;margin-right:.4rem">#${a.short_id ?? '?'}</span>${a.hidden?'<span style="background:#e0e5eb;color:#555;font-size:.7rem;font-weight:700;padding:.1rem .45rem;border-radius:99px;margin-right:.4rem;vertical-align:middle">非表示</span>':''}${esc(a.title)}</div>
+        <div class="card-title"><span style="color:#888;font-size:.78rem;font-weight:500;margin-right:.4rem">#${a.short_id ?? '?'}</span>${a.hidden?'<span style="background:#e0e5eb;color:#555;font-size:.7rem;font-weight:700;padding:.1rem .45rem;border-radius:99px;margin-right:.4rem;vertical-align:middle">非表示</span>':''}${a.home?'<span title="トップページに表示" style="background:#fde5b8;color:#8a5c00;font-size:.7rem;font-weight:700;padding:.1rem .45rem;border-radius:99px;margin-right:.4rem;vertical-align:middle">🏠 TOP</span>':''}${esc(a.title)}</div>
         ${preview ? `<div class="card-preview">${esc(preview)}</div>` : ''}
       </div>
       <div class="card-actions">
@@ -468,6 +468,10 @@ function renderEditor(main) {
         <input type="checkbox" id="eHidden" ${e.hidden?'checked':''} style="width:auto">
         <label for="eHidden" style="margin:0;cursor:pointer">非表示（管理画面には表示されますが、公開ページには表示されません）</label>
       </div>
+      <div class="form-row" style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" id="eHome" ${e.home?'checked':''} style="width:auto">
+        <label for="eHome" style="margin:0;cursor:pointer">🏠 トップページに表示（この記事を開いた状態でトップに出す。未指定なら先頭ジャンルの先頭記事）</label>
+      </div>
       <div class="blocks-editor">
         <div class="blocks-editor-label">ブロック</div>
         <div id="blocksContainer"></div>
@@ -486,6 +490,7 @@ function renderEditor(main) {
   document.getElementById('eGenre').onchange = ev => { e.genre = ev.target.value; };
   document.getElementById('eTitle').oninput  = ev => { e.title = ev.target.value; };
   document.getElementById('eHidden').onchange = ev => { e.hidden = ev.target.checked; };
+  document.getElementById('eHome').onchange = ev => { e.home = ev.target.checked; };
   const sidInp = document.getElementById('eShortId');
   const sidStatus = document.getElementById('eShortIdStatus');
   let sidTimer = null;

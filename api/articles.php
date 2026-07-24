@@ -15,6 +15,7 @@
  * GET    ?access_log=1&days=<n> -> アクセスログ集計テキスト ※管理者
  *        ※閲覧は管理者ログイン中なら下書き版、未ログインなら公開版
  * GET    ?site=1           -> サイト情報（サイト名・ジャンル）※公開
+ * GET    ?home=1           -> トップページに表示する記事（home=trueの記事 or 先頭ジャンルの先頭記事）※公開
  * GET    ?diff=1           -> 下書きと公開版のテキスト差分 ※管理者
  * GET    ?export=1         -> 公開版・下書き全記事をまとめたJSONダウンロード ※管理者
  * GET    ?include_hidden=1 -> 一覧/詳細に非表示記事も含める ※管理者
@@ -358,6 +359,30 @@ if ($method === 'GET') {
             'genres'    => $cfg['genres'],
         ]);
     }
+    if (isset($_GET['home'])) {
+        // トップページに表示する記事を返す。
+        // 1) home=true の記事のうち最新更新のもの、無ければ
+        // 2) 先頭ジャンルの (sort, updated_at) 順の先頭記事
+        $pinned = null;
+        foreach (glob($READ_DIR . '*.json') as $f) {
+            $a = json_decode(file_get_contents($f), true);
+            if (empty($a['home']) || !empty($a['hidden'])) continue;
+            if ($pinned === null || ($a['updated_at'] ?? '') > ($pinned['updated_at'] ?? '')) {
+                $pinned = $a;
+            }
+        }
+        if ($pinned) respond($pinned);
+        $first_genre = $cfg['genres'][0]['key'] ?? '';
+        $list = list_articles($READ_DIR, $first_genre, false);
+        // 通常のクロスリンクを除外し、実体のある記事の先頭
+        foreach ($list as $item) {
+            if (empty($item['src_genre']) && !empty($item['id'])) {
+                $full = load_article($READ_DIR, $item['id']);
+                if ($full && empty($full['hidden'])) respond($full);
+            }
+        }
+        respond(['error' => 'No article available'], 404);
+    }
     if (isset($_GET['diff'])) {
         require_admin();
         respond(['diff' => draft_diff($PUB_DIR, $DRAFT_DIR)]);
@@ -500,6 +525,7 @@ if ($method === 'POST') {
     }
     $body['updated_at'] = $now;
     $body['hidden'] = !empty($body['hidden']);
+    $body['home']   = !empty($body['home']);
     // short_id: 明示指定があればそれを、無ければ既存維持、それも無ければジャンル内で最大+1を採番
     $sid = isset($body['short_id']) ? (int)$body['short_id'] : 0;
     if ($sid <= 0) $sid = (int)($existing['short_id'] ?? 0);

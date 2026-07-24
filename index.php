@@ -405,8 +405,22 @@ function makeBlock(block) {
     state.loading = false; render();
     pushUrl(true);
   } else {
-    await gotoList(true);
-    pushUrl(true);
+    // トップページ: home フラグ or 先頭ジャンルの先頭記事を開いた状態で表示
+    state.view = 'detail'; state.loading = true; render();
+    try {
+      state.current = await apiFetch({ home: 1 });
+      if (state.current && !state.current.error) {
+        state.genre = state.current.genre || state.genre;
+        state.loading = false; render();
+        pushUrl(true);
+      } else {
+        state.loading = false;
+        await gotoList(true); pushUrl(true);
+      }
+    } catch (e) {
+      state.loading = false;
+      await gotoList(true); pushUrl(true);
+    }
   }
 })();
 </script>
