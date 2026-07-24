@@ -273,7 +273,12 @@ function v_length($x) {
 function sanitize_block($b) {
     if (!is_array($b) || !isset($b['type'])) return null;
     if ($b['type'] === 'heading') return ['type' => 'heading', 'content' => (string)($b['content'] ?? '')];
-    if ($b['type'] === 'image')   return ['type' => 'image', 'src' => (string)($b['src'] ?? ''), 'caption' => (string)($b['caption'] ?? '')];
+    if ($b['type'] === 'image') {
+        $o = ['type' => 'image', 'src' => (string)($b['src'] ?? ''), 'caption' => (string)($b['caption'] ?? '')];
+        $dec = (string)($b['decoration'] ?? '');
+        if ($dec === 'phone-frame') $o['decoration'] = $dec;
+        return $o;
+    }
     if ($b['type'] === 'text') {
         $o = ['type' => 'text', 'content' => (string)($b['content'] ?? '')];
         foreach (['bold_color', 'bold_bg_color', 'bold_ul_color'] as $k)

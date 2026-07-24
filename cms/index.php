@@ -674,7 +674,15 @@ function buildBlockEditor(block, idx) {
     capInp.type = 'text'; capInp.placeholder = 'キャプション（省略可）'; capInp.value = block.caption||'';
     capInp.style.marginTop = '.4rem';
     capInp.oninput = ev => { e.blocks[idx].caption = ev.target.value; };
-    bce.appendChild(urlInp); bce.appendChild(capInp);
+    const decSel = document.createElement('select');
+    decSel.style.marginTop = '.4rem';
+    decSel.innerHTML = `<option value="">装飾なし</option><option value="phone-frame">スマホ枠</option>`;
+    decSel.value = block.decoration || '';
+    decSel.onchange = ev => {
+      const v = ev.target.value;
+      if (v) e.blocks[idx].decoration = v; else delete e.blocks[idx].decoration;
+    };
+    bce.appendChild(urlInp); bce.appendChild(capInp); bce.appendChild(decSel);
     if (block.src) {
       const img = document.createElement('img');
       img.src = block.src; img.className = 'img-preview';

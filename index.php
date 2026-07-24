@@ -100,6 +100,33 @@ main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
 .block-image img { width: 100%; max-height: 480px; object-fit: cover; border-radius: 6px; display: block; }
 .block-image .img-caption { font-size: .8rem; color: #888; margin-top: .35rem; text-align: center; }
 
+/* 画像装飾: スマホ枠 */
+.block-image.phone-frame { display: flex; flex-direction: column; align-items: center; }
+.block-image.phone-frame .phone {
+  width: 100%; max-width: 390px; background: #fff; border-radius: 52px;
+  box-shadow: 0 0 0 10px #1c1c1e, 0 0 0 12px #2a2a2e, 0 20px 40px rgba(0,0,0,0.35);
+  overflow: hidden; margin: 12px 0;
+}
+.block-image.phone-frame .phone-statusbar {
+  background: #1c1c1e; height: 48px; position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.block-image.phone-frame .dynamic-island {
+  width: 120px; height: 34px; background: #000; border-radius: 20px;
+  position: absolute; top: 7px;
+}
+.block-image.phone-frame .phone-screen { background: #f5f5f5; display: block; }
+.block-image.phone-frame .phone-screen img {
+  width: 100%; height: auto; max-height: none; display: block;
+  border-radius: 0; object-fit: contain;
+}
+.block-image.phone-frame .phone-indicator {
+  background: #fff; height: 30px; display: flex; align-items: center; justify-content: center;
+}
+.block-image.phone-frame .phone-indicator span {
+  width: 100px; height: 5px; background: #1c1c1e; border-radius: 3px; display: block;
+}
+
 /* Detail */
 .article-detail { background: #fff; border-radius: 8px; border: 1px solid #dde2ea; padding: 2rem 2.5rem; }
 .detail-meta { font-size: .8rem; color: #888; margin-bottom: 1.5rem; }
@@ -344,10 +371,21 @@ function makeBlock(block) {
     div.innerHTML = tableHTML(block.markdown||'', block.style||'plain');
   } else if (block.type === 'image') {
     div.classList.add('block-image');
-    div.innerHTML = block.src
-      ? `<img src="${esc(block.src)}" alt="${esc(block.caption||'')}">
-         ${block.caption ? `<div class="img-caption">${esc(block.caption)}</div>` : ''}`
-      : `<div style="background:#eee;padding:2rem;text-align:center;color:#aaa;border-radius:6px;">画像なし</div>`;
+    if (block.decoration === 'phone-frame') div.classList.add('phone-frame');
+    if (!block.src) {
+      div.innerHTML = `<div style="background:#eee;padding:2rem;text-align:center;color:#aaa;border-radius:6px;">画像なし</div>`;
+    } else {
+      const imgHtml = `<img src="${esc(block.src)}" alt="${esc(block.caption||'')}">`;
+      const inner = block.decoration === 'phone-frame'
+        ? `<div class="phone">
+             <div class="phone-statusbar"><div class="dynamic-island"></div></div>
+             <div class="phone-screen">${imgHtml}</div>
+             <div class="phone-indicator"><span></span></div>
+           </div>`
+        : imgHtml;
+      const cap = block.caption ? `<div class="img-caption">${esc(block.caption)}</div>` : '';
+      div.innerHTML = inner + cap;
+    }
   }
   return div;
 }
