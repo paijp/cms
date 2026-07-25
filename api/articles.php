@@ -6,7 +6,7 @@
  * 管理画面での保存・削除・並べ替えはすべて下書きに対して行い、
  * 「公開」操作で下書きを公開版へ同期する。
  *
- * GET    ?genre=news       -> 記事一覧（先頭ブロックのみ）
+ * GET    ?genre=news       -> 記事一覧（先頭ブロックのみ。&full=1 で全ブロック）
  * GET    ?id=news-001      -> 記事詳細（全ブロック）
  * GET    ?link=<id>&target=<genre> -> クロスリンクの詳細（block.title/text/元記事情報）
  * GET    ?topic=<slug>     -> 固定リンクブロックのslugが一致する記事を返す
@@ -86,20 +86,25 @@ function delete_article($dir, $id) {
     return file_exists($path) && unlink($path);
 }
 
-function list_articles($dir, $genre = null, $show_hidden = false) {
+function list_articles($dir, $genre = null, $show_hidden = false, $full = false) {
     $articles = [];
     foreach (glob($dir . '*.json') as $f) {
         $a = json_decode(file_get_contents($f), true);
         if (!$show_hidden && !empty($a['hidden'])) continue;
         $blocks = $a['blocks'] ?? [];
         if (!$genre || ($a['genre'] ?? '') === $genre) {
-            // 通常の記事: ダイジェスト用に「見出しとクロスリンク以外の最初のブロック」を返す
-            $preview = null;
-            foreach ($blocks as $b) {
-                $t = $b['type'] ?? '';
-                if ($t !== 'heading' && $t !== 'link_from' && $t !== 'permalink') { $preview = $b; break; }
+            if ($full) {
+                // 展開表示用: 全ブロックをそのまま返す
+                $a['blocks'] = $blocks;
+            } else {
+                // ダイジェスト用に「見出しとクロスリンク以外の最初のブロック」を返す
+                $preview = null;
+                foreach ($blocks as $b) {
+                    $t = $b['type'] ?? '';
+                    if ($t !== 'heading' && $t !== 'link_from' && $t !== 'permalink') { $preview = $b; break; }
+                }
+                $a['blocks'] = $preview ? [$preview] : [];
             }
-            $a['blocks'] = $preview ? [$preview] : [];
             $articles[] = $a;
         }
         // 他ジャンル記事に「link_from」ブロック(target_genre==$genre)があれば擬似カードとして追加
@@ -484,7 +489,7 @@ if ($method === 'GET') {
         if (!$SHOW_HIDDEN && !empty($a['hidden'])) respond(['error' => 'Not found'], 404);
         respond($a);
     }
-    respond(list_articles($READ_DIR, $_GET['genre'] ?? null, $SHOW_HIDDEN));
+    respond(list_articles($READ_DIR, $_GET['genre'] ?? null, $SHOW_HIDDEN, isset($_GET['full'])));
 }
 
 if ($method === 'POST') {

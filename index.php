@@ -131,6 +131,13 @@ main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
 .article-detail { background: #fff; border-radius: 8px; border: 1px solid #dde2ea; padding: 2rem 2.5rem; }
 .detail-meta { font-size: .8rem; color: #888; margin-bottom: 1.5rem; }
 
+/* Expanded list (ホーム) */
+.expanded-article { margin-bottom: 1.25rem; }
+.expanded-article:last-child { margin-bottom: 0; }
+.expanded-title { font-size: 1.35rem; font-weight: 700; color: #1c3557; margin-bottom: 1.1rem; }
+.expanded-more { margin-top: 1.2rem; font-size: .95rem; }
+.expanded-more a { color: #1c6fa8; font-weight: 700; text-decoration: underline; cursor: pointer; }
+
 /* Misc */
 .empty { text-align: center; color: #aaa; padding: 3rem 0; }
 .loading { text-align: center; color: #888; padding: 2rem 0; }
@@ -169,11 +176,14 @@ function pushUrl(replace) {
   if (state.topic) {
     p.set('topic', state.topic);
   } else {
-    p.set('g', state.genre);
+    // 先頭ジャンル（ホーム）の一覧はパラメータなしの "/" で表す
+    const isHomeList = state.view === 'list' && state.genre === GENRES[0].key;
+    if (!isHomeList) p.set('g', state.genre);
     if (state.view === 'detail' && state.current) p.set('id', state.current.id);
     if (state.view === 'link_detail' && state.linkDetail) p.set('link', state.linkDetail.src_id);
   }
-  const url = '?' + p.toString();
+  const qs = p.toString();
+  const url = qs ? ('?' + qs) : '/';
   const st = {
     view: state.view, g: state.genre,
     id: state.current?.id || null,
@@ -256,14 +266,60 @@ function renderMain() {
 }
 
 /* List */
+function genreOf(key) { return GENRES.find(g => g.key === key) || {}; }
+function isExpandGenre(key) { return !!genreOf(key).expand; }
+
 async function gotoList(noPush) {
   state.view = 'list'; state.current = null; state.topic = null; state.loading = true; render();
-  state.articles = await apiFetch({ genre: state.genre });
+  const params = { genre: state.genre };
+  if (isExpandGenre(state.genre)) params.full = 1;
+  state.articles = await apiFetch(params);
   state.loading = false; render();
   if (!noPush) pushUrl(false);
 }
 
+/* 展開表示（ホームなど expand ジャンル）: 各記事を全ブロック並べて表示。詳細ページなし */
+function renderExpandedList(main) {
+  if (!state.articles.length) { main.innerHTML = '<div class="empty">記事がありません。</div>'; return; }
+  main.innerHTML = '';
+  state.articles.forEach(a => {
+    const art = document.createElement('article');
+    art.className = 'article-detail expanded-article';
+    const head = document.createElement('h2');
+    head.className = 'expanded-title';
+    head.textContent = a.title || '';
+    art.appendChild(head);
+    if (a.cross_link) {
+      // クロスリンクは 文章 + 元記事へのリンク として展開
+      const body = document.createElement('div');
+      body.className = 'block block-text';
+      body.innerHTML = `<div class="md-body">${mdText(a.blocks?.[0]?.content || '', boldStyleOf(a))}</div>`;
+      art.appendChild(body);
+      const p = document.createElement('p');
+      p.className = 'expanded-more';
+      const linkText = a.src_title || (genreOf(a.src_genre).label || a.src_genre);
+      p.innerHTML = `詳しくは <a href="#">${esc(linkText)}</a> をご覧下さい`;
+      p.querySelector('a').onclick = async (ev) => {
+        ev.preventDefault();
+        state.genre = a.src_genre;
+        state.topic = null; state.loading = true; state.view = 'detail'; render();
+        state.current = await apiFetch({ id: a.id });
+        state.loading = false; render();
+        pushUrl(false);
+      };
+      art.appendChild(p);
+    } else {
+      (a.blocks || []).forEach(b => {
+        if (b.type === 'link_from' || b.type === 'permalink') return;
+        art.appendChild(makeBlock(b));
+      });
+    }
+    main.appendChild(art);
+  });
+}
+
 function renderList(main) {
+  if (isExpandGenre(state.genre)) { renderExpandedList(main); return; }
   if (!state.articles.length) { main.innerHTML = '<div class="empty">記事がありません。</div>'; return; }
   const genreLabel = GENRES.find(g => g.key === state.genre)?.label || '';
   main.innerHTML = '<div class="article-list" id="articleList"></div>';
@@ -404,8 +460,12 @@ function makeBlock(block) {
     state.current = await apiFetch({ id });
     state.loading = false; render();
     pushUrl(true);
+  } else if (isExpandGenre(GENRES[0].key)) {
+    // トップページ: 先頭ジャンルが展開表示（ホーム）なら、その全記事を展開して並べる
+    await gotoList(true);
+    pushUrl(true);
   } else {
-    // トップページ: home フラグ or 先頭ジャンルの先頭記事を開いた状態で表示
+    // 展開ジャンル未設定の場合: home フラグ or 先頭ジャンルの先頭記事を開いた状態で表示
     state.view = 'detail'; state.loading = true; render();
     try {
       state.current = await apiFetch({ home: 1 });
