@@ -460,27 +460,10 @@ function makeBlock(block) {
     state.current = await apiFetch({ id });
     state.loading = false; render();
     pushUrl(true);
-  } else if (isExpandGenre(GENRES[0].key)) {
-    // トップページ: 先頭ジャンルが展開表示（ホーム）なら、その全記事を展開して並べる
+  } else {
+    // トップページ: 先頭ジャンル（expand 指定なら全記事を展開表示、それ以外は通常の一覧）
     await gotoList(true);
     pushUrl(true);
-  } else {
-    // 展開ジャンル未設定の場合: home フラグ or 先頭ジャンルの先頭記事を開いた状態で表示
-    state.view = 'detail'; state.loading = true; render();
-    try {
-      state.current = await apiFetch({ home: 1 });
-      if (state.current && !state.current.error) {
-        state.genre = state.current.genre || state.genre;
-        state.loading = false; render();
-        pushUrl(true);
-      } else {
-        state.loading = false;
-        await gotoList(true); pushUrl(true);
-      }
-    } catch (e) {
-      state.loading = false;
-      await gotoList(true); pushUrl(true);
-    }
   }
 })();
 </script>
