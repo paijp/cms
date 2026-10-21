@@ -1,0 +1,23 @@
+{
+    "_comment": "サイト固有設定のサンプル。site.json にコピーして書き換え、data/site.json として置く（環境変数 CMS_CONFIG で変更可）。data/ ごとバックアップすれば記事本体と設定が両方保存できる。site.json 本体は公開リポジトリにコミットしないこと。",
+
+    "site_name": "サンプル株式会社",
+    "_site_name_html": "任意。公開ページのロゴ部分をHTMLで指定（例: <span class=\"brand-accent\">サンプル</span>株式会社）。未設定なら site_name を表示",
+    "copyright": "© 2026 サンプル株式会社",
+
+    "_genres": "ジャンル（タブ）。先頭がトップページで URL は /。expand: true のジャンルは全記事を展開して並べる（カード・詳細ページなし。ホーム用）",
+    "genres": [
+        {"key": "home", "label": "ホーム", "expand": true},
+        {"key": "news", "label": "お知らせ"},
+        {"key": "faq",  "label": "よくある質問"}
+    ],
+
+    "data_dir":    "/var/www/example-cms/data/articles/",
+    "drafts_dir":  "/var/www/example-cms/data/drafts/",
+    "token_file":  "/var/www/example-cms/admin_token",
+    "session_dir": "/var/www/example-cms/sessions/",
+
+    "_upload": "アップロード画像の保存先と公開URL（nginx で location /uploads/ { alias <upload_dir>; } などで配信）",
+    "upload_dir":  "/var/www/example-cms/uploads/",
+    "upload_url":  "/uploads/"
+}

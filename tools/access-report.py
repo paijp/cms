@@ -47,7 +47,7 @@ def page_label(path):
         if 'link' in q:  return f"{q.get('g', ['?'])[0]}/link:{_short_id(q['link'][0])}"
         if 'g' in q:     return q['g'][0]
         return 'top'
-    if u.path == '/api/articles.php':
+    if u.path in ('/api/articles', '/api/articles.php'):
         if 'site' in q:       return None   # SPA初期化ノイズ
         if 'diff' in q or 'permalink_check' in q or 'export' in q: return None
         if 'topic' in q:      return f"topic:{q['topic'][0]}"

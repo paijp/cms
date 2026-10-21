@@ -4,40 +4,57 @@ PHP + JSONファイルで動く、データベース不要のシンプルなCMS�
 
 - **閲覧ページ:** `/`（PHP。サイト設定を読み込んで表示）
 - **管理画面:** `/cms/`（管理者トークン→Cookieセッションで保護）
-- **API:** `/api/articles.php`
+- **API:** `/api/articles`
 
 ## 動作環境
 
 | 項目 | 内容 |
 |------|------|
-| Web サーバー | nginx |
-| スクリプト言語 | PHP 8.3 |
-| PHP実行 | PHP-FPM |
+| Web サーバー | nginx（リバースプロキシ） |
+| アプリ | Python 3 + Flask（`app.py`） |
+| 画像処理 | Pillow（アップロード画像の形式・サイズ判定） |
 | データ保存 | JSONファイル（下書きと公開版の2面） |
 
 ## ファイル構成
 
 ```
 .
-├── index.php               # 閲覧用フロントエンド（SPA）
-├── cms/
-│   └── index.php           # 管理画面フロントエンド（SPA、認証ゲート付き）
-├── api/
-│   ├── articles.php        # REST API（記事のCRUD・差分・公開・並べ替え）
-│   └── lib.php             # 共通ライブラリ（設定読み込み・認証）
+├── app.py                  # アプリ本体（公開ページ・管理画面・API）
+├── templates/
+│   ├── index.html          # 閲覧用フロントエンド（SPA）
+│   └── cms.html            # 管理画面フロントエンド（SPA）
 ├── assets/
 │   └── cms-render.js       # md/表レンダラ（閲覧・管理プレビュー共用）
-├── site.php.example        # サイト固有設定のサンプル
+├── site.json.example       # サイト固有設定のサンプル
+├── tools/                  # アクセスログ集計・short_id 採番などの補助スクリプト
 └── data/articles/          # サンプル記事データ
 ```
 
-## サイト固有設定（site.php）
+## 起動
+
+```
+CMS_CONFIG=/path/to/data/site.json CMS_PORT=5090 python3 app.py
+```
+
+127.0.0.1:5090 で待ち受けるので、nginx から `/`・`/cms`・`/api/`・`/assets/` を
+プロキシする。systemd で常駐させる例:
+
+```ini
+[Service]
+WorkingDirectory=/path/to/cms
+Environment=CMS_CONFIG=/path/to/data/site.json
+Environment=CMS_PORT=5090
+ExecStart=/usr/bin/python3 /path/to/cms/app.py
+Restart=on-failure
+```
+
+## サイト固有設定（site.json）
 
 サイト名・ジャンル・データ置き場などサイト固有の値は、リポジトリに
-**含めない** 設定ファイル1つ（`site.php`）に集約します。
-`site.php.example` をコピーして作成し、ドキュメントルート外に配置してください
-（既定パス `data/site.php`、環境変数 `CMS_CONFIG` で変更可）。
-`data/` 以下だけをバックアップすれば、記事本体と設定の両方が保存される。。
+**含めない** 設定ファイル1つ（`site.json`）に集約します。
+`site.json.example` をコピーして作成し、`data/site.json` として置いてください
+（環境変数 `CMS_CONFIG` で変更可）。
+`data/` 以下だけをバックアップすれば、記事本体と設定の両方が保存される。
 
 ## 認証
 
@@ -92,40 +109,18 @@ PHP + JSONファイルで動く、データベース不要のシンプルなCMS�
 ## nginx 設定例
 
 ```nginx
-location /api/ {
-    root /var/www/html;
-    location ~ ^/api/.*\.php$ {
-        fastcgi_pass unix:/run/php-fpm/www.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
-
-location /cms {
-    root /var/www/html;
-    index index.php;
-    try_files $uri $uri/ =404;
-    location ~ ^/cms/.*\.php$ {
-        fastcgi_pass unix:/run/php-fpm/www.sock;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
-
-location / {
-    root /var/www/html;
-    index index.php index.html;
-    location = /index.php {
-        fastcgi_pass unix:/run/php-fpm/www.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
+location = /        { proxy_pass http://127.0.0.1:5090; }
+location = /index.php { proxy_pass http://127.0.0.1:5090; }
+location /cms       { proxy_pass http://127.0.0.1:5090; }
+location /api/      { proxy_pass http://127.0.0.1:5090; client_max_body_size 30m; }
+location /assets/   { proxy_pass http://127.0.0.1:5090; }
+location /uploads/  { alias /path/to/uploads/; }
 ```
+
+プロキシ先には `proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme;` を付ける。
 
 ## バックアップ対象
 
-- **`data/` ディレクトリのみ**（`site.php` + `articles/` + `drafts/` が入っている）
+- **`data/` ディレクトリのみ**（`site.json` + `articles/` + `drafts/` が入っている）
 - 管理者トークンは再発行できるので不要。セッションディレクトリも不要。
 - nginx のサイト設定は環境依存なので、必要なら別途保存。
