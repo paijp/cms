@@ -116,6 +116,13 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 .block-item .table-opts select { width: auto; font-size: .8rem; padding: .3rem .5rem; }
 .md-preview { border: 1px dashed #cdd3da; border-radius: 4px; background: #fff; padding: .5rem .7rem; margin-top: .45rem; font-size: .88rem; line-height: 1.7; overflow-x: auto; }
 .md-preview:empty { display: none; }
+.genre-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.genre-table th { text-align: left; font-size: .78rem; color: #666; font-weight: 600; padding: .4rem .5rem; border-bottom: 1px solid #dde2ea; }
+.genre-table td { padding: .45rem .5rem; border-bottom: 1px solid #eef1f4; vertical-align: middle; }
+.genre-table td.gt-move { white-space: nowrap; width: 1%; }
+.genre-table input[type=text] { width: 100%; padding: .4rem .6rem; border: 1px solid #cdd3da; border-radius: 4px; font-size: .88rem; font-family: inherit; }
+.btn-delete:disabled { opacity: .35; cursor: default; }
+.btn-delete:disabled:hover { background: none; color: #c0392b; }
 
 /* Editor Actions */
 .editor-actions { display: flex; gap: .7rem; margin-top: 1.7rem; flex-wrap: wrap; }
@@ -293,10 +300,11 @@ function renderHeader() {
   const el = document.getElementById('headerActions');
   const viewLink = `<a href="${VIEW_BASE}" target="_blank"><button class="btn btn-sm btn-view">プレビュー ↗</button></a>`;
   if (state.view === 'list') {
-    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-view" id="btnAccessLog" style="padding:.35rem .9rem">📊 アクセスログ</button> <a href="${API}?export=1" class="btn btn-sm btn-view" style="text-decoration:none;padding:.35rem .9rem;display:inline-block">⤓ エクスポート</a> <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
+    el.innerHTML = `${viewLink} <button class="btn btn-sm btn-view" id="btnGenres" style="padding:.35rem .9rem">⚙ ジャンル設定</button> <button class="btn btn-sm btn-view" id="btnAccessLog" style="padding:.35rem .9rem">📊 アクセスログ</button> <a href="${API}?export=1" class="btn btn-sm btn-view" style="text-decoration:none;padding:.35rem .9rem;display:inline-block">⤓ エクスポート</a> <button class="btn btn-sm btn-publish" id="btnPublish">公開</button> <button class="btn btn-sm btn-new" id="btnNew">＋ 新規記事</button>`;
     document.getElementById('btnNew').onclick = () => gotoEditor(null);
     document.getElementById('btnPublish').onclick = openPublishModal;
     document.getElementById('btnAccessLog').onclick = openAccessLog;
+    document.getElementById('btnGenres').onclick = gotoGenres;
   } else {
     el.innerHTML = `${viewLink} <button class="btn btn-sm btn-back" id="btnBack">← 一覧へ</button>`;
     document.getElementById('btnBack').onclick = () => gotoList();
@@ -308,6 +316,77 @@ function renderMain() {
   if (state.loading) { main.innerHTML = '<div class="loading">読み込み中...</div>'; return; }
   if (state.view === 'list')   renderList(main);
   if (state.view === 'editor') renderEditor(main);
+  if (state.view === 'genres') renderGenres(main);
+}
+
+/* ---- ジャンル設定 ---- */
+async function gotoGenres() {
+  state.view = 'genres'; state.loading = true; render();
+  const r = await api('GET', { genres: 1 });
+  state.genreEdit = (r.genres || []).map(g => ({ key: g.key, label: g.label, expand: !!g.expand, isNew: false }));
+  state.genreCounts = r.counts || {};
+  state.loading = false; render();
+}
+
+function renderGenres(main) {
+  const rows = state.genreEdit;
+  const cnt = k => state.genreCounts[k] || 0;
+  main.innerHTML = `
+    <div class="editor">
+      <h2>ジャンル設定</h2>
+      <p style="font-size:.85rem;color:#555;margin-bottom:1.2rem;line-height:1.7">
+        タブの表示名・並び順・表示方法を変更できます。先頭のジャンルがトップページ（URL は <code>/</code>）になります。<br>
+        「展開表示」にしたジャンルは、記事カードではなく本文がそのまま並びます（詳細ページなし。ホームやお問い合わせ向け）。<br>
+        保存するとすぐに公開ページへ反映されます（記事の「公開」操作は不要です）。記事が残っているジャンルは削除できません。
+      </p>
+      <table class="genre-table">
+        <thead><tr><th></th><th>表示名</th><th>キー（URL用）</th><th>展開表示</th><th>記事数</th><th></th></tr></thead>
+        <tbody>${rows.map((g, i) => `
+          <tr>
+            <td class="gt-move">
+              <button class="btn-move" data-up="${i}" ${i===0?'disabled':''} title="上へ">↑</button>
+              <button class="btn-move" data-down="${i}" ${i===rows.length-1?'disabled':''} title="下へ">↓</button>
+            </td>
+            <td><input type="text" data-label="${i}" value="${esc(g.label)}" placeholder="表示名"></td>
+            <td>${g.isNew
+              ? `<input type="text" data-key="${i}" value="${esc(g.key)}" placeholder="例: service" style="font-family:monospace">`
+              : `<code>${esc(g.key)}</code>`}</td>
+            <td style="text-align:center"><input type="checkbox" data-expand="${i}" ${g.expand?'checked':''} style="width:auto"></td>
+            <td style="text-align:center">${g.isNew ? '-' : cnt(g.key)}</td>
+            <td><button class="btn-delete" data-del="${i}" style="padding:.3rem .7rem;font-size:.8rem" ${!g.isNew && cnt(g.key) ? 'disabled title="記事が残っているため削除できません"' : ''}>削除</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="add-block-row" style="margin-top:.8rem">
+        <button class="btn-add-block" id="btnAddGenre">＋ ジャンルを追加</button>
+      </div>
+      <div class="editor-actions">
+        <button class="btn-save" id="btnSaveGenres">保存する</button>
+        <button class="btn-cancel" id="btnCancelGenres">キャンセル</button>
+      </div>
+    </div>`;
+  const q = sel => main.querySelectorAll(sel);
+  q('[data-label]').forEach(el => el.oninput = ev => { rows[+el.dataset.label].label = ev.target.value; });
+  q('[data-key]').forEach(el => el.oninput = ev => { rows[+el.dataset.key].key = ev.target.value.trim(); });
+  q('[data-expand]').forEach(el => el.onchange = ev => { rows[+el.dataset.expand].expand = ev.target.checked; });
+  q('[data-up]').forEach(el => el.onclick = () => { const i = +el.dataset.up; [rows[i-1], rows[i]] = [rows[i], rows[i-1]]; renderGenres(main); });
+  q('[data-down]').forEach(el => el.onclick = () => { const i = +el.dataset.down; [rows[i], rows[i+1]] = [rows[i+1], rows[i]]; renderGenres(main); });
+  q('[data-del]').forEach(el => el.onclick = () => {
+    const i = +el.dataset.del; const removed = rows[i];
+    rows.splice(i, 1); renderGenres(main);
+    showToast(`「${removed.label || removed.key}」を削除しました（保存するまで反映されません）`, () => { rows.splice(i, 0, removed); renderGenres(main); });
+  });
+  document.getElementById('btnAddGenre').onclick = () => { rows.push({ key: '', label: '', expand: false, isNew: true }); renderGenres(main); };
+  document.getElementById('btnCancelGenres').onclick = () => gotoList();
+  document.getElementById('btnSaveGenres').onclick = async () => {
+    const body = { genres: rows.map(g => ({ key: g.key, label: g.label.trim(), expand: g.expand })) };
+    const res = await fetch(API + '?genres=1', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await res.json();
+    if (!res.ok) { showToast(r.error || '保存に失敗しました'); return; }
+    showToast('ジャンル設定を保存しました');
+    // タブ構成はページに埋め込まれているので再読み込みして反映
+    setTimeout(() => { location.href = location.pathname; }, 600);
+  };
 }
 
 /* ---- 公開（差分確認 → 反映） ---- */

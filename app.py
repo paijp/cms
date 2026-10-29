@@ -72,10 +72,27 @@ _cfg = None
 def cfg():
     global _cfg
     if _cfg is None:
-        path = os.environ.get('CMS_CONFIG') or os.path.join(BASE_DIR, 'data', 'site.json')
-        with open(path, encoding='utf-8') as f:
+        with open(config_path(), encoding='utf-8') as f:
             _cfg = json.load(f)
     return _cfg
+
+def config_path():
+    return os.environ.get('CMS_CONFIG') or os.path.join(BASE_DIR, 'data', 'site.json')
+
+def genres_path():
+    """管理画面のジャンル設定の保存先（site.json と同じディレクトリの genres.json）"""
+    return os.path.join(os.path.dirname(config_path()), 'genres.json')
+
+def genres():
+    """ジャンル一覧。genres.json があればそれを、無ければ site.json の genres を使う"""
+    try:
+        with open(genres_path(), encoding='utf-8') as f:
+            g = json.load(f)
+        if isinstance(g, list) and g:
+            return g
+    except (OSError, ValueError):
+        pass
+    return cfg().get('genres', [])
 
 def base():
     """サブパス配置時の接頭辞（例: '/kex'）。ルート配置なら ''"""
@@ -461,7 +478,7 @@ def render_page(name, preview=False):
         '@@COPYRIGHT@@': _esc(c.get('copyright', '')),
         '@@ASSET_VER@@': ver,
         # </script> 混入を防ぐため < をエスケープ
-        '@@GENRES_JSON@@': json.dumps(c.get('genres', []), ensure_ascii=False).replace('<', '\\u003c'),
+        '@@GENRES_JSON@@': json.dumps(genres(), ensure_ascii=False).replace('<', '\\u003c'),
         '@@IS_PREVIEW@@': 'true' if preview else 'false',
         '@@BASE@@': base(),
         '@@HERO@@': _hero_html(c),
@@ -541,15 +558,18 @@ def api_articles():
         c = cfg()
         if 'site' in a:
             return respond({'site_name': c.get('site_name'), 'copyright': c.get('copyright'),
-                            'genres': c.get('genres', [])})
+                            'genres': genres()})
         if 'diff' in a:
             if not admin: return unauthorized()
             return respond({'diff': draft_diff(pub, draft)})
+        if 'genres' in a:
+            if not admin: return unauthorized()
+            return respond({'genres': genres(), 'counts': genre_counts(pub, draft)})
         if 'export' in a:
             if not admin: return unauthorized()
             body = json.dumps({
                 'exported_at': now_iso(),
-                'site': {'site_name': c.get('site_name'), 'genres': c.get('genres', [])},
+                'site': {'site_name': c.get('site_name'), 'genres': genres()},
                 'articles': all_articles(pub),
                 'drafts': all_articles(draft),
             }, ensure_ascii=False, indent=4)
@@ -628,6 +648,8 @@ def api_articles():
         return respond({'error': 'Delete failed'}, 404)
 
     # POST
+    if 'genres' in a:
+        return save_genres(request.get_json(silent=True), pub, draft)
     if 'publish' in a:
         return respond(publish_drafts(pub, draft))
     if 'duplicate' in a:
@@ -683,6 +705,48 @@ def api_articles():
     body['short_id'] = sid
     body['blocks'] = sanitize_blocks(body.get('blocks'))
     return respond(body) if save_article(draft, body) else respond({'error': 'Save failed'}, 500)
+
+
+# ---------------------------------------------------------------- ジャンル設定
+
+def genre_counts(pub, draft):
+    """ジャンルごとの記事数（下書き・公開版のどちらかにある記事を1件と数える）"""
+    seen = {}
+    for d in (draft, pub):
+        for x in all_articles(d):
+            seen.setdefault(x.get('id'), x.get('genre'))
+    counts = {}
+    for gk in seen.values():
+        counts[gk] = counts.get(gk, 0) + 1
+    return counts
+
+def save_genres(body, pub, draft):
+    items = body.get('genres') if isinstance(body, dict) else None
+    if not isinstance(items, list) or not items:
+        return respond({'error': 'ジャンルを1つ以上指定してください'}, 400)
+    out, keys = [], set()
+    for it in items:
+        if not isinstance(it, dict):
+            return respond({'error': '不正なデータです'}, 400)
+        key = str(it.get('key') or '').strip()
+        label = str(it.get('label') or '').strip()
+        if not ID_RE.match(key) or len(key) > 32:
+            return respond({'error': f'キー「{key}」は半角英数字・_・- で32字以内にしてください'}, 400)
+        if key in keys:
+            return respond({'error': f'キー「{key}」が重複しています'}, 400)
+        if not label:
+            return respond({'error': f'キー「{key}」の表示名が空です'}, 400)
+        keys.add(key)
+        g_ = {'key': key, 'label': label}
+        if it.get('expand'):
+            g_['expand'] = True
+        out.append(g_)
+    counts = genre_counts(pub, draft)
+    removed = [k for k in (x.get('key') for x in genres()) if k not in keys and counts.get(k)]
+    if removed:
+        return respond({'error': '記事が残っているジャンルは削除できません: ' + ', '.join(removed)}, 400)
+    write_json(genres_path(), out)
+    return respond({'genres': out})
 
 
 # ---------------------------------------------------------------- 画像アップロード API

@@ -48,6 +48,13 @@ ExecStart=/usr/bin/python3 /path/to/cms/app.py
 Restart=on-failure
 ```
 
+## ジャンル設定
+
+管理画面の「⚙ ジャンル設定」で、タブの表示名・並び順・展開表示の有無を変更し、
+ジャンルを追加・削除できる（記事が残っているジャンルは削除不可。キーは作成後変更不可）。
+設定は `site.json` と同じディレクトリの `genres.json` に保存され、`site.json` の
+`genres` より優先される。保存するとすぐ公開ページに反映される。
+
 ## サブパスへの配置（1台に複数のCMS）
 
 `site.json` に `"base_path": "/kex"` を書き、別ポート（`CMS_PORT`）で起動すると、
