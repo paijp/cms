@@ -442,13 +442,11 @@ def _hero_html(c):
     tag = c.get('tagline_html') or (_esc(c['tagline']) if c.get('tagline') else '')
     if not tag:
         return ''
-    name = c.get('site_name_html') or _esc(c.get('site_name', ''))
     return ('  <section class="hero"><div class="hero-inner">'
             f'<h1 class="hero-tagline">{tag}</h1>'
-            f'<div class="hero-name">{name}</div>'
             '</div></section>\n')
 
-def render_page(name, banner=''):
+def render_page(name, preview=False):
     c = cfg()
     with open(os.path.join(TEMPLATE_DIR, name), encoding='utf-8') as f:
         html = f.read()
@@ -464,7 +462,7 @@ def render_page(name, banner=''):
         '@@ASSET_VER@@': ver,
         # </script> 混入を防ぐため < をエスケープ
         '@@GENRES_JSON@@': json.dumps(c.get('genres', []), ensure_ascii=False).replace('<', '\\u003c'),
-        '@@PREVIEW_BANNER@@': banner,
+        '@@IS_PREVIEW@@': 'true' if preview else 'false',
         '@@BASE@@': base(),
         '@@HERO@@': _hero_html(c),
     }
@@ -493,9 +491,7 @@ def public_page():
                 if any(b.get('type') == 'permalink' and b.get('slug') == slug for b in a.get('blocks') or []):
                     return redirect(base() + '/?g=' + quote(a.get('genre', '')) + '&id=' + quote(a.get('id', '')), 302)
         return _simple_page(404, '404', '<h1>404</h1><p>指定の記事は見つかりませんでした。</p><p><a href="' + base() + '/">トップページへ</a></p>')
-    banner = ('  <div class="preview-banner">プレビュー版（下書き）を表示中 — 公開するには管理画面の「公開」を押してください</div>\n'
-              if admin else '')
-    return render_page('index.html', banner)
+    return render_page('index.html', preview=admin)
 
 @app.route('/index.php')
 def legacy_index():

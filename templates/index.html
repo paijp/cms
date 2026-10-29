@@ -32,17 +32,16 @@ header {
 .hero-inner { max-width: 900px; margin: 0 auto; }
 .hero-tagline { font-size: 1.6rem; font-weight: 700; line-height: 1.55; letter-spacing: .02em; }
 .hero-tagline .brand-accent { color: #f0a500; }
-.hero-name { margin-top: .9rem; font-size: .95rem; color: rgba(255,255,255,.75); letter-spacing: .04em; }
 @media (max-width: 640px) {
   header { padding: 0 1rem; }
   .logo { font-size: .95rem; }
   .hero { padding: 1.8rem 1rem 1.6rem; }
   .hero-tagline { font-size: 1.2rem; }
-  .hero-name { font-size: .85rem; }
   nav.genre-nav { padding: 0 .5rem; }
   main { padding: 1.25rem 1rem; }
   .article-detail { padding: 1.4rem 1.2rem; }
 }
+.preview-label { align-self: center; margin-left: .6rem; font-size: .8rem; font-weight: 600; color: #b37a00; white-space: nowrap; }
 .preview-banner { background: #f0a500; color: #1a2a3a; text-align: center; font-size: .8rem; font-weight: 600; padding: .35rem; }
 
 /* Genre Nav */
@@ -133,7 +132,7 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
     <div class="logo" id="logoBtn">@@SITE_NAME_HTML@@</div>
     <div id="headerActions"></div>
   </header>
-@@HERO@@@@PREVIEW_BANNER@@  <nav class="genre-nav" id="genreNav"></nav>
+@@HERO@@  <nav class="genre-nav" id="genreNav"></nav>
   <main id="main"></main>
   <footer>@@COPYRIGHT@@</footer>
 </div>
@@ -141,6 +140,7 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 <script>
 const API = '@@BASE@@/api/articles';
 const GENRES = @@GENRES_JSON@@;
+const IS_PREVIEW = @@IS_PREVIEW@@;
 
 let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, linkDetail: null, topic: null, loading: false };
 
@@ -221,7 +221,7 @@ function renderGenreNav() {
   const nav = document.getElementById('genreNav');
   nav.innerHTML = GENRES.map(g =>
     `<button class="${g.key===state.genre?'active':''}" data-g="${g.key}">${esc(g.label)}</button>`
-  ).join('');
+  ).join('') + (IS_PREVIEW ? '<span class="preview-label" title="管理者としてログイン中のため下書きを表示しています。公開するには管理画面の「公開」を押してください">(プレビュー版)</span>' : '');
   nav.querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => { state.genre = b.dataset.g; gotoList(); })
   );
