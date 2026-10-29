@@ -725,17 +725,21 @@ def save_genres(body, pub, draft):
     if not isinstance(items, list) or not items:
         return respond({'error': 'ジャンルを1つ以上指定してください'}, 400)
     out, keys = [], set()
-    for it in items:
+    # エラー時は行番号(index)と欄(field)も返し、画面側で該当欄を示せるようにする
+    bad = lambda i, field, msg: respond({'error': msg, 'index': i, 'field': field}, 400)
+    for i, it in enumerate(items):
         if not isinstance(it, dict):
             return respond({'error': '不正なデータです'}, 400)
         key = str(it.get('key') or '').strip()
         label = str(it.get('label') or '').strip()
+        if not key:
+            return bad(i, 'key', 'キーを入力してください')
         if not ID_RE.match(key) or len(key) > 32:
-            return respond({'error': f'キー「{key}」は半角英数字・_・- で32字以内にしてください'}, 400)
+            return bad(i, 'key', 'キーは半角英数字・_・- の32字以内にしてください')
         if key in keys:
-            return respond({'error': f'キー「{key}」が重複しています'}, 400)
+            return bad(i, 'key', f'キー「{key}」は他のジャンルで使われています')
         if not label:
-            return respond({'error': f'キー「{key}」の表示名が空です'}, 400)
+            return bad(i, 'label', '表示名を入力してください')
         keys.add(key)
         g_ = {'key': key, 'label': label}
         if it.get('expand'):

@@ -122,6 +122,24 @@ main { flex: 1; padding: 2rem; max-width: 960px; margin: 0 auto; width: 100%; }
 .genre-table td.gt-move { white-space: nowrap; width: 1%; }
 .genre-table input[type=text] { width: 100%; padding: .4rem .6rem; border: 1px solid #cdd3da; border-radius: 4px; font-size: .88rem; font-family: inherit; }
 .btn-delete:disabled { opacity: .35; cursor: default; }
+.genre-table input[type=text]:focus { outline: none; border-color: #4ea8de; box-shadow: 0 0 0 3px rgba(78,168,222,.15); }
+.genre-table input.field-error, .genre-table input.field-error:focus { outline: none; border-color: #c0392b; background: #fdf1f0; box-shadow: 0 0 0 3px rgba(192,57,43,.2); }
+.field-msg { color: #c0392b; font-size: .76rem; margin-top: .25rem; }
+.field-msg:empty { display: none; }
+.form-error { color: #c0392b; background: #fdf1f0; border: 1px solid #f1c4bf; border-radius: 5px; padding: .55rem .8rem; margin-top: 1rem; font-size: .85rem; }
+.form-error:empty { display: none; }
+@media (max-width: 640px) {
+  header { padding: 0 1rem; }
+  main { padding: 1rem; }
+  .editor { padding: 1.2rem 1rem; }
+  /* ジャンル設定: 1ジャンル1枚のカードに縦並び */
+  .genre-table thead { display: none; }
+  .genre-table, .genre-table tbody, .genre-table tr, .genre-table td { display: block; width: 100%; }
+  .genre-table tr { border: 1px solid #dde2ea; border-radius: 6px; padding: .5rem .7rem; margin-bottom: .7rem; background: #fafbfc; }
+  .genre-table td { border: none; padding: .3rem 0; text-align: left !important; }
+  .genre-table td[data-th]::before { content: attr(data-th); display: block; font-size: .72rem; color: #888; font-weight: 600; margin-bottom: .15rem; }
+  .genre-table td.gt-move { width: auto; }
+}
 .btn-delete:disabled:hover { background: none; color: #c0392b; }
 
 /* Editor Actions */
@@ -320,6 +338,45 @@ function renderMain() {
 }
 
 /* ---- ジャンル設定 ---- */
+function validateGenres(rows) {
+  const errs = [], seen = {};
+  rows.forEach((g, i) => {
+    if (g.isNew) {
+      if (!g.key) errs.push({ index: i, field: 'key', msg: 'キーを入力してください（半角英数字。例: service）' });
+      else if (!/^[a-zA-Z0-9_\-]{1,32}$/.test(g.key)) errs.push({ index: i, field: 'key', msg: '半角英数字・_・- の32字以内で入力してください' });
+    }
+    if (g.key && seen[g.key] !== undefined) errs.push({ index: i, field: g.isNew ? 'key' : 'label', msg: `キー「${g.key}」は他のジャンルで使われています` });
+    if (g.key) seen[g.key] = i;
+    if (!g.label.trim()) errs.push({ index: i, field: 'label', msg: '表示名を入力してください' });
+  });
+  return errs;
+}
+function clearFieldError(el) {
+  el.classList.remove('field-error');
+  const m = document.getElementById(el.id.replace(/(\d+)$/, 'Msg$1'));
+  if (m) m.textContent = '';
+  const fe = document.getElementById('genreFormError');
+  if (fe && !document.querySelector('.genre-table .field-error')) fe.textContent = '';
+}
+function showGenreErrors(errs, formMsg) {
+  document.querySelectorAll('.genre-table .field-error').forEach(el => el.classList.remove('field-error'));
+  document.querySelectorAll('.genre-table .field-msg').forEach(el => el.textContent = '');
+  let first = null;
+  errs.forEach(e => {
+    const id = (e.field === 'key' ? 'gKey' : 'gLabel') + e.index;
+    const el = document.getElementById(id) || document.getElementById('gLabel' + e.index);
+    if (!el) return;
+    el.classList.add('field-error');
+    const m = document.getElementById(el.id.replace(/(\d+)$/, 'Msg$1'));
+    if (m && !m.textContent) m.textContent = e.msg;
+    if (!first) first = el;
+  });
+  const fe = document.getElementById('genreFormError');
+  fe.textContent = formMsg || (errs.length ? `入力内容を確認してください（${errs.length}件）。赤枠の欄を修正してから保存してください。` : '');
+  if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus(); }
+  else fe.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 async function gotoGenres() {
   state.view = 'genres'; state.loading = true; render();
   const r = await api('GET', { genres: 1 });
@@ -347,12 +404,14 @@ function renderGenres(main) {
               <button class="btn-move" data-up="${i}" ${i===0?'disabled':''} title="上へ">↑</button>
               <button class="btn-move" data-down="${i}" ${i===rows.length-1?'disabled':''} title="下へ">↓</button>
             </td>
-            <td><input type="text" data-label="${i}" value="${esc(g.label)}" placeholder="表示名"></td>
-            <td>${g.isNew
-              ? `<input type="text" data-key="${i}" value="${esc(g.key)}" placeholder="例: service" style="font-family:monospace">`
+            <td data-th="表示名"><input type="text" id="gLabel${i}" data-label="${i}" value="${esc(g.label)}" placeholder="表示名">
+              <div class="field-msg" id="gLabelMsg${i}"></div></td>
+            <td data-th="キー（URL用）">${g.isNew
+              ? `<input type="text" id="gKey${i}" data-key="${i}" value="${esc(g.key)}" placeholder="例: service" style="font-family:monospace">
+                 <div class="field-msg" id="gKeyMsg${i}"></div>`
               : `<code>${esc(g.key)}</code>`}</td>
-            <td style="text-align:center"><input type="checkbox" data-expand="${i}" ${g.expand?'checked':''} style="width:auto"></td>
-            <td style="text-align:center">${g.isNew ? '-' : cnt(g.key)}</td>
+            <td data-th="展開表示" style="text-align:center"><input type="checkbox" data-expand="${i}" ${g.expand?'checked':''} style="width:auto"></td>
+            <td data-th="記事数" style="text-align:center">${g.isNew ? '-' : cnt(g.key)}</td>
             <td><button class="btn-delete" data-del="${i}" style="padding:.3rem .7rem;font-size:.8rem" ${!g.isNew && cnt(g.key) ? 'disabled title="記事が残っているため削除できません"' : ''}>削除</button></td>
           </tr>`).join('')}
         </tbody>
@@ -360,14 +419,15 @@ function renderGenres(main) {
       <div class="add-block-row" style="margin-top:.8rem">
         <button class="btn-add-block" id="btnAddGenre">＋ ジャンルを追加</button>
       </div>
+      <div class="form-error" id="genreFormError"></div>
       <div class="editor-actions">
         <button class="btn-save" id="btnSaveGenres">保存する</button>
         <button class="btn-cancel" id="btnCancelGenres">キャンセル</button>
       </div>
     </div>`;
   const q = sel => main.querySelectorAll(sel);
-  q('[data-label]').forEach(el => el.oninput = ev => { rows[+el.dataset.label].label = ev.target.value; });
-  q('[data-key]').forEach(el => el.oninput = ev => { rows[+el.dataset.key].key = ev.target.value.trim(); });
+  q('[data-label]').forEach(el => el.oninput = ev => { rows[+el.dataset.label].label = ev.target.value; clearFieldError(el); });
+  q('[data-key]').forEach(el => el.oninput = ev => { rows[+el.dataset.key].key = ev.target.value.trim(); clearFieldError(el); });
   q('[data-expand]').forEach(el => el.onchange = ev => { rows[+el.dataset.expand].expand = ev.target.checked; });
   q('[data-up]').forEach(el => el.onclick = () => { const i = +el.dataset.up; [rows[i-1], rows[i]] = [rows[i], rows[i-1]]; renderGenres(main); });
   q('[data-down]').forEach(el => el.onclick = () => { const i = +el.dataset.down; [rows[i], rows[i+1]] = [rows[i+1], rows[i]]; renderGenres(main); });
@@ -379,10 +439,17 @@ function renderGenres(main) {
   document.getElementById('btnAddGenre').onclick = () => { rows.push({ key: '', label: '', expand: false, isNew: true }); renderGenres(main); };
   document.getElementById('btnCancelGenres').onclick = () => gotoList();
   document.getElementById('btnSaveGenres').onclick = async () => {
+    const errs = validateGenres(rows);
+    if (errs.length) { showGenreErrors(errs); return; }
     const body = { genres: rows.map(g => ({ key: g.key, label: g.label.trim(), expand: g.expand })) };
     const res = await fetch(API + '?genres=1', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const r = await res.json();
-    if (!res.ok) { showToast(r.error || '保存に失敗しました'); return; }
+    if (!res.ok) {
+      // サーバーが行と欄を返したらその欄を示す。それ以外（削除できない等）はフォーム下に表示
+      if (r.index !== undefined && r.field) showGenreErrors([{ index: r.index, field: r.field, msg: r.error }]);
+      else showGenreErrors([], r.error || '保存に失敗しました');
+      return;
+    }
     showToast('ジャンル設定を保存しました');
     // タブ構成はページに埋め込まれているので再読み込みして反映
     setTimeout(() => { location.href = location.pathname; }, 600);
