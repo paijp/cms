@@ -437,6 +437,17 @@ def _esc(s):
     return (str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             .replace('"', '&quot;').replace("'", '&#039;'))
 
+def _hero_html(c):
+    """tagline があればヘッダー下に大きく表示。tagline_html でHTML指定も可（site.json は管理者が書くもの）"""
+    tag = c.get('tagline_html') or (_esc(c['tagline']) if c.get('tagline') else '')
+    if not tag:
+        return ''
+    name = c.get('site_name_html') or _esc(c.get('site_name', ''))
+    return ('  <section class="hero"><div class="hero-inner">'
+            f'<h1 class="hero-tagline">{tag}</h1>'
+            f'<div class="hero-name">{name}</div>'
+            '</div></section>\n')
+
 def render_page(name, banner=''):
     c = cfg()
     with open(os.path.join(TEMPLATE_DIR, name), encoding='utf-8') as f:
@@ -455,6 +466,7 @@ def render_page(name, banner=''):
         '@@GENRES_JSON@@': json.dumps(c.get('genres', []), ensure_ascii=False).replace('<', '\\u003c'),
         '@@PREVIEW_BANNER@@': banner,
         '@@BASE@@': base(),
+        '@@HERO@@': _hero_html(c),
     }
     for k, v in subs.items():
         html = html.replace(k, v)

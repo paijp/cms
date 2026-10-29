@@ -6,6 +6,8 @@
 
     "site_name": "サンプル株式会社",
     "_site_name_html": "任意。公開ページのロゴ部分をHTMLで指定（例: <span class=\"brand-accent\">サンプル</span>株式会社）。未設定なら site_name を表示",
+    "_tagline": "任意。公開ページのヘッダー下に大きく表示するキャッチコピー（tagline_html ならHTML可）。未設定なら非表示",
+    "tagline": "",
     "copyright": "© 2026 サンプル株式会社",
 
     "_genres": "ジャンル（タブ）。先頭がトップページで URL は /。expand: true のジャンルは全記事を展開して並べる（カード・詳細ページなし。ホーム用）",

@@ -27,6 +27,22 @@ header {
 .btn-back:hover { background: rgba(255,255,255,.25); }
 
 /* Preview banner (管理者ログイン中) */
+/* Hero (site.json の tagline を設定したときだけ表示) */
+.hero { background: linear-gradient(135deg, #1c3557 0%, #24476f 100%); color: #fff; padding: 2.6rem 2rem 2.4rem; border-top: 1px solid rgba(255,255,255,.08); }
+.hero-inner { max-width: 900px; margin: 0 auto; }
+.hero-tagline { font-size: 1.6rem; font-weight: 700; line-height: 1.55; letter-spacing: .02em; }
+.hero-tagline .brand-accent { color: #f0a500; }
+.hero-name { margin-top: .9rem; font-size: .95rem; color: rgba(255,255,255,.75); letter-spacing: .04em; }
+@media (max-width: 640px) {
+  header { padding: 0 1rem; }
+  .logo { font-size: .95rem; }
+  .hero { padding: 1.8rem 1rem 1.6rem; }
+  .hero-tagline { font-size: 1.2rem; }
+  .hero-name { font-size: .85rem; }
+  nav.genre-nav { padding: 0 .5rem; }
+  main { padding: 1.25rem 1rem; }
+  .article-detail { padding: 1.4rem 1.2rem; }
+}
 .preview-banner { background: #f0a500; color: #1a2a3a; text-align: center; font-size: .8rem; font-weight: 600; padding: .35rem; }
 
 /* Genre Nav */
@@ -117,7 +133,7 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
     <div class="logo" id="logoBtn">@@SITE_NAME_HTML@@</div>
     <div id="headerActions"></div>
   </header>
-@@PREVIEW_BANNER@@  <nav class="genre-nav" id="genreNav"></nav>
+@@HERO@@@@PREVIEW_BANNER@@  <nav class="genre-nav" id="genreNav"></nav>
   <main id="main"></main>
   <footer>@@COPYRIGHT@@</footer>
 </div>
