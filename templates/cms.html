@@ -200,10 +200,10 @@ footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; 
   </div>
 </div>
 
-<script src="/assets/cms-render.js?v=@@ASSET_VER@@"></script>
+<script src="@@BASE@@/assets/cms-render.js?v=@@ASSET_VER@@"></script>
 <script>
-const API = '/api/articles';
-const VIEW_BASE = '/';
+const API = '@@BASE@@/api/articles';
+const VIEW_BASE = '@@BASE@@/';
 const GENRES = @@GENRES_JSON@@;
 const BLOCK_TYPES = [
   { type: 'heading',   label: '見出し' },
@@ -723,7 +723,7 @@ function refreshImgPreview(bce, idx) {
 }
 
 /* ---- 画像アップロード / ピッカー ---- */
-const UPLOAD_API = '/api/uploads';
+const UPLOAD_API = '@@BASE@@/api/uploads';
 
 function setImageBlockSrc(idx, bce, url) {
   state.editing.blocks[idx].src = url;

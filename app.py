@@ -77,6 +77,10 @@ def cfg():
             _cfg = json.load(f)
     return _cfg
 
+def base():
+    """サブパス配置時の接頭辞（例: '/kex'）。ルート配置なら ''"""
+    return '/' + cfg().get('base_path', '').strip('/') if cfg().get('base_path', '').strip('/') else ''
+
 def dir_of(key):
     return cfg()[key].rstrip('/') + '/'
 
@@ -89,6 +93,10 @@ def draft_dir():
 
 # ---------------------------------------------------------------- 認証
 
+def cookie_name():
+    b = base().strip('/')
+    return COOKIE_NAME + ('_' + re.sub(r'[^a-zA-Z0-9]', '_', b) if b else '')
+
 def token_valid(given):
     try:
         with open(cfg()['token_file'], encoding='utf-8') as f:
@@ -99,7 +107,7 @@ def token_valid(given):
     return expected != '' and given != '' and hmac.compare_digest(expected, given)
 
 def session_valid():
-    key = request.cookies.get(COOKIE_NAME, '')
+    key = request.cookies.get(cookie_name(), '')
     if not SESSION_RE.match(key):
         return False
     if not os.path.isfile(dir_of('session_dir') + key):
@@ -127,7 +135,7 @@ def is_admin():
 def _refresh_cookie(resp):
     key = g.get('refresh_session')
     if key:
-        resp.set_cookie(COOKIE_NAME, key, max_age=COOKIE_TTL, path='/',
+        resp.set_cookie(cookie_name(), key, max_age=COOKIE_TTL, path=base() + '/',
                         secure=True, httponly=True, samesite='Lax')
     return resp
 
@@ -360,6 +368,14 @@ def build_access_report(days=30, gap_min=30):
             if not m:
                 continue
             ip, ts, method, path, status, ua = m.groups()
+            # サブパス配置時は自サイトの行だけを対象にし、接頭辞を外して判定する
+            bp = base()
+            if bp:
+                if path != bp and not path.startswith(bp + '/') and not path.startswith(bp + '?'):
+                    continue
+                path = path[len(bp):] or '/'
+                if path.startswith('?'):
+                    path = '/' + path
             if status[0] not in '23':
                 continue
             try:
@@ -438,6 +454,7 @@ def render_page(name, banner=''):
         # </script> 混入を防ぐため < をエスケープ
         '@@GENRES_JSON@@': json.dumps(c.get('genres', []), ensure_ascii=False).replace('<', '\\u003c'),
         '@@PREVIEW_BANNER@@': banner,
+        '@@BASE@@': base(),
     }
     for k, v in subs.items():
         html = html.replace(k, v)
@@ -462,8 +479,8 @@ def public_page():
                 if not admin and a.get('hidden'):
                     continue
                 if any(b.get('type') == 'permalink' and b.get('slug') == slug for b in a.get('blocks') or []):
-                    return redirect('/?g=' + quote(a.get('genre', '')) + '&id=' + quote(a.get('id', '')), 302)
-        return _simple_page(404, '404', '<h1>404</h1><p>指定の記事は見つかりませんでした。</p><p><a href="/">トップページへ</a></p>')
+                    return redirect(base() + '/?g=' + quote(a.get('genre', '')) + '&id=' + quote(a.get('id', '')), 302)
+        return _simple_page(404, '404', '<h1>404</h1><p>指定の記事は見つかりませんでした。</p><p><a href="' + base() + '/">トップページへ</a></p>')
     banner = ('  <div class="preview-banner">プレビュー版（下書き）を表示中 — 公開するには管理画面の「公開」を押してください</div>\n'
               if admin else '')
     return render_page('index.html', banner)
@@ -471,11 +488,11 @@ def public_page():
 @app.route('/index.php')
 def legacy_index():
     qs = request.query_string.decode()
-    return redirect('/' + ('?' + qs if qs else ''), 301)
+    return redirect(base() + '/' + ('?' + qs if qs else ''), 301)
 
 @app.route('/cms')
 def cms_noslash():
-    return redirect('/cms/', 301)
+    return redirect(base() + '/cms/', 301)
 
 @app.route('/cms/')
 @app.route('/cms/index.php')
@@ -484,7 +501,7 @@ def cms_page():
     if token and token_valid(token):
         # トークンURLでのアクセス: セッションCookieを発行し、トークンをURLから消す
         session_start_new()
-        return redirect('/cms/', 302)
+        return redirect(base() + '/cms/', 302)
     if not session_valid():
         return _simple_page(403, '403 Forbidden', '<h1>403</h1><p>このページは管理者専用です。管理者用のトークン付きURLでアクセスしてください。</p>')
     return render_page('cms.html')
@@ -740,6 +757,28 @@ def api_uploads():
 @app.errorhandler(413)
 def too_large(_e):
     return jsonify({'error': 'file too large'}), 413
+
+
+class _StripBase:
+    """base_path 配下のリクエストから接頭辞を外してルーティングする（nginx は接頭辞付きのまま転送）"""
+    def __init__(self, wsgi):
+        self.wsgi = wsgi
+    def __call__(self, environ, start_response):
+        with app.app_context():
+            bp = base()
+        path = environ.get('PATH_INFO', '')
+        if bp:
+            if path == bp:
+                start_response('301 Moved Permanently', [('Location', bp + '/')])
+                return [b'']
+            if not path.startswith(bp + '/'):
+                start_response('404 Not Found', [('Content-Type', 'text/plain')])
+                return [b'Not Found']
+            environ['PATH_INFO'] = path[len(bp):]
+            environ['SCRIPT_NAME'] = environ.get('SCRIPT_NAME', '') + bp
+        return self.wsgi(environ, start_response)
+
+app.wsgi_app = _StripBase(app.wsgi_app)
 
 
 if __name__ == '__main__':

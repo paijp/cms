@@ -121,9 +121,9 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
   <main id="main"></main>
   <footer>@@COPYRIGHT@@</footer>
 </div>
-<script src="/assets/cms-render.js?v=@@ASSET_VER@@"></script>
+<script src="@@BASE@@/assets/cms-render.js?v=@@ASSET_VER@@"></script>
 <script>
-const API = '/api/articles';
+const API = '@@BASE@@/api/articles';
 const GENRES = @@GENRES_JSON@@;
 
 let state = { view: 'list', genre: GENRES[0].key, articles: [], current: null, linkDetail: null, topic: null, loading: false };
@@ -147,7 +147,7 @@ function pushUrl(replace) {
     if (state.view === 'link_detail' && state.linkDetail) p.set('link', state.linkDetail.src_id);
   }
   const qs = p.toString();
-  const url = qs ? ('?' + qs) : '/';
+  const url = qs ? ('?' + qs) : '@@BASE@@/';
   const st = {
     view: state.view, g: state.genre,
     id: state.current?.id || null,

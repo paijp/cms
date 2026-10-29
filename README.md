@@ -48,6 +48,23 @@ ExecStart=/usr/bin/python3 /path/to/cms/app.py
 Restart=on-failure
 ```
 
+## サブパスへの配置（1台に複数のCMS）
+
+`site.json` に `"base_path": "/kex"` を書き、別ポート（`CMS_PORT`）で起動すると、
+`https://example.com/kex/` 配下で独立したCMSとして動く。nginx は接頭辞を残したまま転送する:
+
+```nginx
+location /kex/ {
+    proxy_pass http://127.0.0.1:5091;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 30m;
+}
+location = /kex { return 301 /kex/; }
+```
+
+ログインCookieは名前とパスがサブパスごとに分かれるので、同じホスト上の他のCMSとは干渉しない。
+
 ## サイト固有設定（site.json）
 
 サイト名・ジャンル・データ置き場などサイト固有の値は、リポジトリに
