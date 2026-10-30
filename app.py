@@ -35,6 +35,7 @@ API（/api/articles と /api/uploads。旧URLの .php 付きでも受け付け�
 import difflib
 import glob
 import hashlib
+import mimetypes
 import hmac
 import json
 import os
@@ -51,6 +52,8 @@ from flask import Flask, Response, g, jsonify, redirect, request, send_from_dire
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 ASSET_DIR = os.path.join(BASE_DIR, 'assets')
+# pdf.js は ES モジュール(.mjs)。JavaScript の MIME で返さないとブラウザが読み込まない
+mimetypes.add_type('text/javascript', '.mjs')
 
 COOKIE_NAME = 'cms_session'
 COOKIE_TTL = 60 * 60 * 24 * 400          # ブラウザ側Cookieの期限（アクセスごとに延長）
@@ -282,7 +285,7 @@ def sanitize_block(b):
             size = max(0, int(b.get('size') or 0))
         except (TypeError, ValueError):
             size = 0
-        return {'type': 'file', 'src': s('src'), 'name': s('name'), 'size': size}
+        return {'type': 'file', 'src': s('src'), 'name': s('name'), 'size': size, 'thumb': s('thumb')}
     if t == 'text':
         return _bold_attrs(b, {'type': 'text', 'content': s('content')})
     if t == 'permalink':

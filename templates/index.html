@@ -44,6 +44,8 @@ header {
 .block-file { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; border: 1px solid #dde2ea; border-radius: 8px; padding: .8rem 1rem; background: #fafbfc; }
 .file-card { display: flex; align-items: center; gap: .8rem; flex: 1; min-width: 12rem; text-decoration: none; color: inherit; }
 .file-icon { flex: none; width: 2.6rem; height: 3.2rem; border-radius: 4px; background: #c0392b; color: #fff; font-size: .75rem; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding-bottom: .4rem; }
+.file-thumb { flex: none; width: 120px; height: auto; border: 1px solid #dde2ea; border-radius: 3px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+@media (max-width: 600px) { .file-card:has(.file-thumb) { flex-direction: column; align-items: flex-start; } .file-thumb { width: 100%; max-width: 320px; } }
 .file-meta { display: flex; flex-direction: column; min-width: 0; }
 .file-name { font-weight: 600; color: #1c3557; word-break: break-all; }
 .file-card:hover .file-name { text-decoration: underline; }
@@ -511,7 +513,7 @@ function makeBlock(block) {
     const fname = name.replace(/[\\/:*?"<>|]/g, '_') + '.pdf';
     div.innerHTML = `
       <a class="file-card" href="${esc(block.src)}" target="_blank" rel="noopener">
-        <span class="file-icon">PDF</span>
+        ${block.thumb ? `<img class="file-thumb" src="${esc(block.thumb)}" alt="${esc(name)} 1ページ目" loading="lazy">` : '<span class="file-icon">PDF</span>'}
         <span class="file-meta"><span class="file-name">${esc(name)}</span><span class="file-size">PDF${size ? ' ・ ' + size : ''}</span></span>
       </a>
       <a class="file-dl" href="${esc(block.src)}" download="${esc(fname)}">ダウンロード</a>`;

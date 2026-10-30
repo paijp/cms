@@ -827,14 +827,21 @@ function buildBlockEditor(block, idx) {
     const pickBtn = document.createElement('button');
     pickBtn.type = 'button'; pickBtn.textContent = '📁 選択'; pickBtn.style.cssText = btnCss;
     pickBtn.onclick = () => openImagePicker(idx, bce, 'pdf');
-    row.appendChild(info); row.appendChild(upBtn); row.appendChild(pickBtn);
+    const thumbBtn = document.createElement('button');
+    thumbBtn.type = 'button'; thumbBtn.textContent = '🖼 プレビューを作り直す'; thumbBtn.style.cssText = btnCss;
+    thumbBtn.className = 'btn-thumb';
+    thumbBtn.onclick = () => makePdfThumb(idx, bce);
+    row.appendChild(info); row.appendChild(upBtn); row.appendChild(pickBtn); row.appendChild(thumbBtn);
     const nameInp = document.createElement('input');
     nameInp.type = 'text'; nameInp.className = 'file-name';
     nameInp.placeholder = '表示名・ダウンロード時のファイル名 (例: 会社案内2026)';
     nameInp.value = block.name || '';
     nameInp.style.marginTop = '.4rem';
     nameInp.oninput = ev => { e.blocks[idx].name = ev.target.value; };
-    bce.appendChild(row); bce.appendChild(nameInp);
+    const thumb = document.createElement('div');
+    thumb.className = 'file-thumb';
+    thumb.style.cssText = 'margin-top:.5rem;font-size:.78rem;color:#888;';
+    bce.appendChild(row); bce.appendChild(nameInp); bce.appendChild(thumb);
     refreshFileInfo(bce, idx);
   } else if (block.type === 'image') {
     const urlRow = document.createElement('div');
@@ -915,11 +922,68 @@ function refreshFileInfo(bce, idx) {
   if (el) el.innerHTML = b.src
     ? `📄 <a href="${esc(b.src)}" target="_blank" rel="noopener">${esc(b.src.split('/').pop().slice(0, 12))}….pdf</a>${b.size ? ' (' + fmtSize(b.size) + ')' : ''}`
     : '<span style="color:#c0392b">PDFが未選択です</span>';
+  const btn = bce.querySelector('.btn-thumb');
+  if (btn) btn.style.display = b.src ? '' : 'none';
+  const th = bce.querySelector('.file-thumb');
+  if (th) th.innerHTML = b.thumb
+    ? `<img src="${esc(b.thumb)}" style="max-width:160px;border:1px solid #ddd;border-radius:3px;display:block;">`
+    : (b.src ? 'プレビュー画像なし（公開ページではPDFアイコンを表示）' : '');
+}
+
+/* PDF の1ページ目を管理者のブラウザで画像化し、画像としてアップロードする。
+   サーバは PDF を開かない。pdf.js は管理画面でだけ読み込む */
+let pdfjsLib = null;
+async function loadPdfjs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('@@BASE@@/assets/pdfjs/pdf.min.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '@@BASE@@/assets/pdfjs/pdf.worker.min.mjs';
+  }
+  return pdfjsLib;
+}
+async function renderPdfThumb(url) {
+  const lib = await loadPdfjs();
+  const doc = await lib.getDocument({
+    url, cMapUrl: '@@BASE@@/assets/pdfjs/cmaps/', cMapPacked: true,
+    standardFontDataUrl: '@@BASE@@/assets/pdfjs/standard_fonts/',
+  }).promise;
+  try {
+    const page = await doc.getPage(1);
+    const vp1 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: 800 / vp1.width });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85));
+  } finally {
+    doc.destroy();
+  }
+}
+async function makePdfThumb(idx, bce) {
+  const b = state.editing.blocks[idx];
+  if (!b?.src) return;
+  const th = bce.querySelector('.file-thumb');
+  if (th) th.textContent = 'プレビュー画像を作成中…';
+  try {
+    const blob = await renderPdfThumb(b.src);
+    if (!blob) throw new Error('画像化できませんでした');
+    const fd = new FormData();
+    fd.append('file', blob, 'preview.jpg');
+    const res = await fetch(UPLOAD_API, { method: 'POST', body: fd, credentials: 'same-origin' });
+    const j = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+    if (state.editing.blocks[idx] === b) b.thumb = j.url;
+  } catch (err) {
+    showToast('プレビュー画像を作成できませんでした: ' + err.message);
+  }
+  refreshFileInfo(bce, idx);
 }
 function setFileBlock(idx, bce, f) {
   const b = state.editing.blocks[idx];
-  b.src = f.url; b.size = f.size || 0;
+  b.src = f.url; b.size = f.size || 0; b.thumb = '';
   refreshFileInfo(bce, idx);
+  makePdfThumb(idx, bce);
 }
 function uploadFileForBlock(idx, bce) {
   const fi = document.createElement('input');
@@ -1054,7 +1118,7 @@ function addBlock(type) {
   if (type==='link_from') { block.target_genre=''; block.title=''; block.text=''; }
   if (type==='permalink') { block.slug=''; }
   if (type==='contact_form') { block.thanks=''; }
-  if (type==='file') { block.src=''; block.name=''; block.size=0; }
+  if (type==='file') { block.src=''; block.name=''; block.size=0; block.thumb=''; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
   document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
