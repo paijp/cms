@@ -40,7 +40,9 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
+import urllib.request
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -216,7 +218,7 @@ def list_articles(d, genre=None, show_hidden=False, full=False):
             if not full:
                 # ダイジェスト用に「見出し・クロスリンク・固定リンク以外の最初のブロック」を返す
                 prev = next((b for b in blocks
-                             if b.get('type') not in ('heading', 'link_from', 'permalink')), None)
+                             if b.get('type') not in ('heading', 'link_from', 'permalink', 'contact_form')), None)
                 a['blocks'] = [prev] if prev else []
             out.append(a)
         # 他ジャンル記事の link_from ブロック(target_genre==genre)を擬似カードとして追加
@@ -283,6 +285,9 @@ def sanitize_block(b):
     if t == 'table':
         style = b.get('style') if b.get('style') in TABLE_STYLES else 'plain'
         return {'type': 'table', 'markdown': s('markdown'), 'style': style}
+    if t == 'contact_form':
+        # お問い合わせフォーム。送信後に表示する文（md書式）だけを持つ
+        return {'type': 'contact_form', 'thanks': s('thanks')}
     if t == 'link_from':
         tg = b.get('target_genre')
         tg = tg if isinstance(tg, str) and ID_RE.match(tg) else ''
@@ -403,9 +408,12 @@ def build_access_report(days=30, gap_min=30):
                 continue
             u = urlparse(path)
             q = parse_qs(u.query, keep_blank_values=True)
-            admin = method != 'GET' or u.path.startswith('/cms/') or any(k in q for k in ADMIN_PARAMS)
+            admin = ((method != 'GET' and u.path != '/api/contact') or u.path.startswith('/cms/')
+                     or any(k in q for k in ADMIN_PARAMS))
             label = _page_label(path, short_map)
-            if method == 'GET' and label is not None:
+            if method == 'POST' and u.path == '/api/contact':
+                label = 'contact:sent'
+            if (method == 'GET' or label == 'contact:sent') and label is not None:
                 events.append((ip, _short_ua(ua), t, label, admin))
             elif admin:
                 # ページラベルは付かないが、セッションを管理者と印付けるためのマーカー
@@ -705,6 +713,91 @@ def api_articles():
     body['short_id'] = sid
     body['blocks'] = sanitize_blocks(body.get('blocks'))
     return respond(body) if save_article(draft, body) else respond({'error': 'Save failed'}, 500)
+
+
+# ---------------------------------------------------------------- お問い合わせフォーム
+
+CONTACT_FROM_MAX = 200
+CONTACT_BODY_MAX = 5000
+CONTACT_RATE = (5, 600)          # 同じIPから 600 秒に 5 件まで
+_contact_lock = threading.Lock()
+_contact_hits = {}
+
+def contact_log_path():
+    return cfg().get('contact_log') or os.path.join(os.path.dirname(config_path()), 'contactlog.txt')
+
+def _client_ip():
+    # nginx の背後で動くので X-Real-IP / X-Forwarded-For を優先（直結時は remote_addr）
+    return (request.headers.get('X-Real-IP')
+            or (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+            or request.remote_addr or '')
+
+def _rate_limited(ip):
+    n, window = CONTACT_RATE
+    now = time.time()
+    with _contact_lock:
+        hits = [t for t in _contact_hits.get(ip, []) if now - t < window]
+        if len(hits) >= n:
+            _contact_hits[ip] = hits
+            return True
+        hits.append(now)
+        _contact_hits[ip] = hits
+        return False
+
+def _send_zulip(url, text):
+    """Zulip の Webhook へ {"text": ...} を POST。失敗時は 5 秒おきに 10 回まで再試行（旧サイトと同じ）"""
+    data = json.dumps({'text': text}, ensure_ascii=False).encode('utf-8')
+    for _ in range(10):
+        try:
+            req = urllib.request.Request(url, data=data, method='POST',
+                                         headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req, timeout=20) as res:
+                if 200 <= res.status < 300:
+                    return
+        except Exception as e:
+            app.logger.warning('zulip send failed: %s', e)
+        time.sleep(5)
+    app.logger.error('zulip send gave up')
+
+@app.route('/api/contact', methods=['POST'])
+def api_contact():
+    body = request.get_json(silent=True) or {}
+    sender = str(body.get('from') or '').strip()
+    message = str(body.get('body') or '').strip()
+    # ボット対策: 画面に出していない入力欄(website)に値があれば、受け付けたふりをして捨てる
+    if body.get('website'):
+        return respond({'ok': True})
+    errors = {}
+    if not sender:
+        errors['from'] = 'メールアドレスを入力してください'
+    elif len(sender) > CONTACT_FROM_MAX:
+        errors['from'] = f'{CONTACT_FROM_MAX}字以内で入力してください'
+    if not message:
+        errors['body'] = '本文を入力してください'
+    elif len(message) > CONTACT_BODY_MAX:
+        errors['body'] = f'{CONTACT_BODY_MAX}字以内で入力してください'
+    if errors:
+        return respond({'error': '入力内容を確認してください', 'fields': errors}, 400)
+    ip = _client_ip()
+    if _rate_limited(ip):
+        return respond({'error': '短時間に送信が続いたため受け付けられませんでした。しばらくしてから再度お試しください'}, 429)
+    stamp = datetime.now().strftime('%y%m%d-%H%M%S')
+    entry = f'==== {stamp} ====\n{sender}\n{message}\n[ip: {ip}] [ua: {request.headers.get("User-Agent", "")[:200]}]\n\x0c\n'
+    path = contact_log_path()
+    with _contact_lock:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(entry)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    url = cfg().get('zulip_webhook_url')
+    if url:
+        # Zulip 側で自動リンクされないよう . と @ の前後に空白を入れる（旧サイトと同じ）
+        safe = f'{sender}\n{message}'.replace('.', ' . ').replace('@', ' @ ')
+        text = f'お問い合わせ ({cfg().get("site_name", "")}) {stamp}\n{safe}'
+        threading.Thread(target=_send_zulip, args=(url, text), daemon=True).start()
+    return respond({'ok': True})
 
 
 # ---------------------------------------------------------------- ジャンル設定

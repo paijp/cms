@@ -24,5 +24,9 @@
 
     "_upload": "アップロード画像の保存先と公開URL（nginx で location /uploads/ { alias <upload_dir>; } などで配信）",
     "upload_dir":  "/var/www/example-cms/uploads/",
-    "upload_url":  "/uploads/"
+    "upload_url":  "/uploads/",
+
+    "_contact": "任意。お問い合わせフォームブロックの送信先。contact_log 省略時は site.json と同じフォルダの contactlog.txt。zulip_webhook_url を書くと送信内容を Zulip にも POST する（秘密情報なので公開しないこと）",
+    "contact_log": "/var/www/example-cms/data/contactlog.txt",
+    "zulip_webhook_url": ""
 }

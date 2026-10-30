@@ -237,6 +237,7 @@ const BLOCK_TYPES = [
   { type: 'image',     label: '画像' },
   { type: 'link_from', label: '他ジャンルからリンク' },
   { type: 'permalink', label: '固定リンク' },
+  { type: 'contact_form', label: 'お問い合わせフォーム' },
 ];
 const TABLE_STYLE_OPTIONS = [
   { value: 'plain',       label: '標準' },
@@ -714,6 +715,17 @@ function buildBlockEditor(block, idx) {
     ta.oninput = ev => { e.blocks[idx].markdown = ev.target.value; upd(); };
     opts.querySelector('select').onchange = ev => { e.blocks[idx].style = ev.target.value; upd(); };
     upd();
+  } else if (block.type === 'contact_form') {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:.78rem;color:#666;margin-bottom:.5rem;padding:.4rem .6rem;background:#f0f7ff;border:1px dashed #4ea8de;border-radius:4px';
+    note.innerHTML = 'メールアドレスと本文の入力欄・送信ボタンが表示されます。送信内容はログファイルに記録され、設定があれば Zulip にも通知されます。下の欄は送信後に表示するメッセージです (マークダウン可、空欄なら標準の文面)。';
+    bce.appendChild(note);
+    const ta = document.createElement('textarea');
+    ta.rows = 4;
+    ta.placeholder = '送信完了メッセージ (空欄で標準の文面)';
+    ta.value = block.thanks || '';
+    ta.oninput = ev => { e.blocks[idx].thanks = ev.target.value; };
+    bce.appendChild(ta);
   } else if (block.type === 'permalink') {
     const note = document.createElement('div');
     note.style.cssText = 'font-size:.78rem;color:#666;margin-bottom:.5rem;padding:.4rem .6rem;background:#fffbf0;border:1px dashed #f0a500;border-radius:4px';
@@ -967,6 +979,7 @@ function addBlock(type) {
   if (type==='image')   { block.src=''; block.caption=''; }
   if (type==='link_from') { block.target_genre=''; block.title=''; block.text=''; }
   if (type==='permalink') { block.slug=''; }
+  if (type==='contact_form') { block.thanks=''; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
   document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

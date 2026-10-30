@@ -41,6 +41,19 @@ header {
   main { padding: 1.25rem 1rem; }
   .article-detail { padding: 1.4rem 1.2rem; }
 }
+.contact-form { display: flex; flex-direction: column; gap: .35rem; max-width: 640px; }
+.contact-form label { font-size: .88rem; font-weight: 600; color: #444; margin-top: .5rem; }
+.contact-form input[type=email], .contact-form textarea { width: 100%; padding: .6rem .8rem; border: 1px solid #cdd3da; border-radius: 5px; font-size: 1rem; font-family: inherit; }
+.contact-form input:focus, .contact-form textarea:focus { outline: none; border-color: #4ea8de; box-shadow: 0 0 0 3px rgba(78,168,222,.15); }
+.contact-form .cf-invalid, .contact-form .cf-invalid:focus { border-color: #c0392b; background: #fdf1f0; box-shadow: 0 0 0 3px rgba(192,57,43,.2); }
+.cf-msg { color: #c0392b; font-size: .8rem; }
+.cf-msg:empty, .cf-error:empty { display: none; }
+.cf-error { color: #c0392b; background: #fdf1f0; border: 1px solid #f1c4bf; border-radius: 5px; padding: .5rem .8rem; font-size: .85rem; margin-top: .5rem; }
+.cf-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.cf-submit { align-self: flex-start; margin-top: .8rem; padding: .6rem 2rem; background: #1c3557; color: #fff; border: none; border-radius: 5px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.cf-submit:hover { background: #24476f; }
+.cf-submit:disabled { background: #888; cursor: default; }
+.cf-thanks { background: #f1f8f2; border: 1px solid #c8e6cc; border-radius: 6px; padding: 1rem 1.2rem; }
 .preview-label { align-self: center; margin-left: .6rem; font-size: .8rem; font-weight: 600; color: #b37a00; white-space: nowrap; }
 .preview-banner { background: #f0a500; color: #1a2a3a; text-align: center; font-size: .8rem; font-weight: 600; padding: .35rem; }
 
@@ -138,7 +151,8 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 </div>
 <script src="@@BASE@@/assets/cms-render.js?v=@@ASSET_VER@@"></script>
 <script>
-const API = '@@BASE@@/api/articles';
+const BASE = '@@BASE@@';
+const API = BASE + '/api/articles';
 const GENRES = @@GENRES_JSON@@;
 const IS_PREVIEW = @@IS_PREVIEW@@;
 
@@ -393,6 +407,62 @@ function renderDetail(main) {
   });
 }
 
+/* お問い合わせフォーム */
+const CONTACT_THANKS_DEFAULT = '**メッセージが送信されました。**\n\n入力いただいたメールアドレス宛に、追ってご連絡を差し上げますので、お待ちください。\nメールアドレスが間違っているなど、内容によってはご連絡できない場合があります。';
+function renderContactForm(div, block) {
+  div.innerHTML = `
+    <form class="contact-form" novalidate>
+      <label for="cfFrom">お客様のメールアドレス</label>
+      <input type="email" id="cfFrom" name="from" maxlength="200" autocomplete="email">
+      <div class="cf-msg" id="cfFromMsg"></div>
+      <label for="cfBody">本文</label>
+      <textarea id="cfBody" name="body" rows="8" maxlength="5000"></textarea>
+      <div class="cf-msg" id="cfBodyMsg"></div>
+      <input type="text" name="website" tabindex="-1" autocomplete="off" class="cf-hp" aria-hidden="true">
+      <div class="cf-error" id="cfError"></div>
+      <button type="submit" class="cf-submit">送信</button>
+    </form>`;
+  const form = div.querySelector('form');
+  const fields = { from: form.elements.from, body: form.elements.body };
+  const msgOf = k => div.querySelector(k === 'from' ? '#cfFromMsg' : '#cfBodyMsg');
+  const clear = k => { fields[k].classList.remove('cf-invalid'); msgOf(k).textContent = ''; };
+  Object.keys(fields).forEach(k => fields[k].addEventListener('input', () => { clear(k); div.querySelector('#cfError').textContent = ''; }));
+  const showErrors = (errs, summary) => {
+    Object.keys(fields).forEach(clear);
+    let first = null;
+    Object.entries(errs).forEach(([k, m]) => {
+      if (!fields[k]) return;
+      fields[k].classList.add('cf-invalid'); msgOf(k).textContent = m;
+      if (!first) first = fields[k];
+    });
+    div.querySelector('#cfError').textContent = summary || '';
+    if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus(); }
+  };
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const data = { from: fields.from.value.trim(), body: fields.body.value.trim(), website: form.elements.website.value };
+    const errs = {};
+    if (!data.from) errs.from = 'メールアドレスを入力してください';
+    if (!data.body) errs.body = '本文を入力してください';
+    if (Object.keys(errs).length) { showErrors(errs, '入力内容を確認してください。赤枠の欄を入力してから送信してください。'); return; }
+    const btn = form.querySelector('.cf-submit');
+    btn.disabled = true; btn.textContent = '送信中...';
+    try {
+      const res = await fetch(BASE + '/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showErrors(r.fields || {}, r.error || '送信できませんでした。時間をおいて再度お試しください。');
+        btn.disabled = false; btn.textContent = '送信'; return;
+      }
+      div.innerHTML = `<div class="cf-thanks md-body">${mdText(block.thanks || CONTACT_THANKS_DEFAULT, '')}</div>`;
+      div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {
+      showErrors({}, '送信できませんでした。通信状況をご確認のうえ、再度お試しください。');
+      btn.disabled = false; btn.textContent = '送信';
+    }
+  });
+}
+
 function makeBlock(block) {
   const div = document.createElement('div');
   div.className = 'block';
@@ -422,6 +492,9 @@ function makeBlock(block) {
       const cap = block.caption ? `<div class="img-caption">${esc(block.caption)}</div>` : '';
       div.innerHTML = inner + cap;
     }
+  } else if (block.type === 'contact_form') {
+    div.classList.add('block-contact');
+    renderContactForm(div, block);
   }
   return div;
 }
