@@ -764,9 +764,6 @@ def api_contact():
     body = request.get_json(silent=True) or {}
     sender = str(body.get('from') or '').strip()
     message = str(body.get('body') or '').strip()
-    # ボット対策: 画面に出していない入力欄(website)に値があれば、受け付けたふりをして捨てる
-    if body.get('website'):
-        return respond({'ok': True})
     errors = {}
     if not sender:
         errors['from'] = 'メールアドレスを入力してください'
@@ -781,8 +778,11 @@ def api_contact():
     ip = _client_ip()
     if _rate_limited(ip):
         return respond({'error': '短時間に送信が続いたため受け付けられませんでした。しばらくしてから再度お試しください'}, 429)
+    # ボット対策: 画面側は @ のないアドレスを送らせないので、@ がなければ JavaScript を
+    # 実行しないボットとみなす。成功を返して諦めさせ、ログには印を付けて残し通知はしない
+    bot = '@' not in sender
     stamp = datetime.now().strftime('%y%m%d-%H%M%S')
-    entry = f'==== {stamp} ====\n{sender}\n{message}\n[ip: {ip}] [ua: {request.headers.get("User-Agent", "")[:200]}]\n\x0c\n'
+    entry = f'==== {stamp}{" [@なし・未通知]" if bot else ""} ====\n{sender}\n{message}\n[ip: {ip}] [ua: {request.headers.get("User-Agent", "")[:200]}]\n\x0c\n'
     path = contact_log_path()
     with _contact_lock:
         with open(path, 'a', encoding='utf-8') as f:
@@ -792,7 +792,7 @@ def api_contact():
         except OSError:
             pass
     url = cfg().get('zulip_webhook_url')
-    if url:
+    if url and not bot:
         # Zulip 側で自動リンクされないよう . と @ の前後に空白を入れる（旧サイトと同じ）
         safe = f'{sender}\n{message}'.replace('.', ' . ').replace('@', ' @ ')
         text = f'お問い合わせ ({cfg().get("site_name", "")}) {stamp}\n{safe}'

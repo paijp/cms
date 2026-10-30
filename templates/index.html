@@ -49,7 +49,6 @@ header {
 .cf-msg { color: #c0392b; font-size: .8rem; }
 .cf-msg:empty, .cf-error:empty { display: none; }
 .cf-error { color: #c0392b; background: #fdf1f0; border: 1px solid #f1c4bf; border-radius: 5px; padding: .5rem .8rem; font-size: .85rem; margin-top: .5rem; }
-.cf-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .cf-submit { align-self: flex-start; margin-top: .8rem; padding: .6rem 2rem; background: #1c3557; color: #fff; border: none; border-radius: 5px; font-size: 1rem; font-weight: 600; cursor: pointer; }
 .cf-submit:hover { background: #24476f; }
 .cf-submit:disabled { background: #888; cursor: default; }
@@ -418,7 +417,6 @@ function renderContactForm(div, block) {
       <label for="cfBody">本文</label>
       <textarea id="cfBody" name="body" rows="8" maxlength="5000"></textarea>
       <div class="cf-msg" id="cfBodyMsg"></div>
-      <input type="text" name="website" tabindex="-1" autocomplete="off" class="cf-hp" aria-hidden="true">
       <div class="cf-error" id="cfError"></div>
       <button type="submit" class="cf-submit">送信</button>
     </form>`;
@@ -440,10 +438,14 @@ function renderContactForm(div, block) {
   };
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const data = { from: fields.from.value.trim(), body: fields.body.value.trim(), website: form.elements.website.value };
+    const data = { from: fields.from.value.trim(), body: fields.body.value.trim() };
     const errs = {};
     if (!data.from) errs.from = 'メールアドレスを入力してください';
     if (!data.body) errs.body = '本文を入力してください';
+    if (!errs.from && !data.from.includes('@')) {
+      alert('メールアドレスに「@」が含まれていません。正しいメールアドレスを入力してください。');
+      errs.from = 'メールアドレスに「@」が含まれていません';
+    }
     if (Object.keys(errs).length) { showErrors(errs, '入力内容を確認してください。赤枠の欄を入力してから送信してください。'); return; }
     const btn = form.querySelector('.cf-submit');
     btn.disabled = true; btn.textContent = '送信中...';
