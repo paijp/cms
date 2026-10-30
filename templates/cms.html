@@ -217,7 +217,7 @@ footer { background: #1a2a3a; color: rgba(255,255,255,.45); text-align: center; 
 </div>
 <div id="imgPickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:8px;width:90%;max-width:800px;max-height:85vh;display:flex;flex-direction:column;">
-    <div style="padding:1rem 1.5rem;font-weight:700;color:#1a2a3a;border-bottom:1px solid #dde2ea;">アップロード済み画像から選択</div>
+    <div style="padding:1rem 1.5rem;font-weight:700;color:#1a2a3a;border-bottom:1px solid #dde2ea;" id="imgPickerTitle">アップロード済み画像から選択</div>
     <div id="imgPickerBody" style="padding:1rem;overflow:auto;flex:1;"></div>
     <div style="padding:.9rem 1.5rem;border-top:1px solid #dde2ea;display:flex;justify-content:flex-end;">
       <button class="btn btn-cancel" id="btnImgPickerClose" style="padding:.5rem 1.2rem">閉じる</button>
@@ -238,6 +238,7 @@ const BLOCK_TYPES = [
   { type: 'link_from', label: '他ジャンルからリンク' },
   { type: 'permalink', label: '固定リンク' },
   { type: 'contact_form', label: 'お問い合わせフォーム' },
+  { type: 'file', label: 'PDFファイル' },
 ];
 const TABLE_STYLE_OPTIONS = [
   { value: 'plain',       label: '標準' },
@@ -813,6 +814,28 @@ function buildBlockEditor(block, idx) {
     });
     updPv();
     updNote();
+  } else if (block.type === 'file') {
+    const btnCss = 'padding:.3rem .7rem;border:1px solid #ccc;background:#f8f8f8;border-radius:4px;cursor:pointer;font-size:.83rem;white-space:nowrap;';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;';
+    const info = document.createElement('span');
+    info.className = 'file-info';
+    info.style.cssText = 'flex:1;min-width:10rem;font-size:.83rem;color:#555;word-break:break-all;';
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button'; upBtn.textContent = '📤 PDFをアップロード'; upBtn.style.cssText = btnCss;
+    upBtn.onclick = () => uploadFileForBlock(idx, bce);
+    const pickBtn = document.createElement('button');
+    pickBtn.type = 'button'; pickBtn.textContent = '📁 選択'; pickBtn.style.cssText = btnCss;
+    pickBtn.onclick = () => openImagePicker(idx, bce, 'pdf');
+    row.appendChild(info); row.appendChild(upBtn); row.appendChild(pickBtn);
+    const nameInp = document.createElement('input');
+    nameInp.type = 'text'; nameInp.className = 'file-name';
+    nameInp.placeholder = '表示名・ダウンロード時のファイル名 (例: 会社案内2026)';
+    nameInp.value = block.name || '';
+    nameInp.style.marginTop = '.4rem';
+    nameInp.oninput = ev => { e.blocks[idx].name = ev.target.value; };
+    bce.appendChild(row); bce.appendChild(nameInp);
+    refreshFileInfo(bce, idx);
   } else if (block.type === 'image') {
     const urlRow = document.createElement('div');
     urlRow.style.cssText = 'display:flex;gap:.35rem;align-items:stretch;';
@@ -883,6 +906,54 @@ function refreshImgPreview(bce, idx) {
 /* ---- 画像アップロード / ピッカー ---- */
 const UPLOAD_API = '@@BASE@@/api/uploads';
 
+function fmtSize(n) {
+  return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+}
+function refreshFileInfo(bce, idx) {
+  const b = state.editing.blocks[idx];
+  const el = bce.querySelector('.file-info');
+  if (el) el.innerHTML = b.src
+    ? `📄 <a href="${esc(b.src)}" target="_blank" rel="noopener">${esc(b.src.split('/').pop().slice(0, 12))}….pdf</a>${b.size ? ' (' + fmtSize(b.size) + ')' : ''}`
+    : '<span style="color:#c0392b">PDFが未選択です</span>';
+}
+function setFileBlock(idx, bce, f) {
+  const b = state.editing.blocks[idx];
+  b.src = f.url; b.size = f.size || 0;
+  refreshFileInfo(bce, idx);
+}
+function uploadFileForBlock(idx, bce) {
+  const fi = document.createElement('input');
+  fi.type = 'file';
+  fi.accept = 'application/pdf,.pdf';
+  fi.onchange = async () => {
+    const f = fi.files?.[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('file', f);
+    showToast('アップロード中… (' + fmtSize(f.size) + ')');
+    try {
+      const res = await fetch(UPLOAD_API, { method: 'POST', body: fd, credentials: 'same-origin' });
+      const txt = await res.text();
+      let j = null; try { j = JSON.parse(txt); } catch (_) {}
+      if (!res.ok || j?.mime !== 'application/pdf') {
+        const msg = j?.error || (res.ok ? 'PDFではありません' : res.status === 413 ? 'ファイルが大きすぎます' : `HTTP ${res.status}`);
+        showToast('アップロード失敗: ' + msg);
+        return;
+      }
+      setFileBlock(idx, bce, j);
+      const nameInp = bce.querySelector('.file-name');
+      if (nameInp && !nameInp.value) {
+        nameInp.value = f.name.replace(/\.pdf$/i, '');
+        state.editing.blocks[idx].name = nameInp.value;
+      }
+      showToast('アップロードしました');
+    } catch (err) {
+      showToast('アップロード失敗: ' + err.message);
+    }
+  };
+  fi.click();
+}
+
 function setImageBlockSrc(idx, bce, url) {
   state.editing.blocks[idx].src = url;
   const urlInp = bce.querySelector('input[type=text]');
@@ -918,7 +989,9 @@ function uploadImageForBlock(idx, bce) {
   fi.click();
 }
 
-async function openImagePicker(idx, bce) {
+async function openImagePicker(idx, bce, kind) {
+  const isPdf = kind === 'pdf';
+  document.getElementById('imgPickerTitle').textContent = isPdf ? 'アップロード済みPDFから選択' : 'アップロード済み画像から選択';
   const overlay = document.getElementById('imgPickerOverlay');
   const body = document.getElementById('imgPickerBody');
   body.innerHTML = '<div style="color:#888;text-align:center;padding:2rem;">読み込み中…</div>';
@@ -927,13 +1000,13 @@ async function openImagePicker(idx, bce) {
   try {
     const res = await fetch(UPLOAD_API, { credentials: 'same-origin' });
     const j = await res.json();
-    files = j.files || [];
+    files = (j.files || []).filter(f => isPdf ? f.mime === 'application/pdf' : f.mime !== 'application/pdf');
   } catch (err) {
     body.innerHTML = '<div style="color:#c33;">読み込みに失敗しました</div>';
     return;
   }
   if (!files.length) {
-    body.innerHTML = '<div style="color:#888;text-align:center;padding:2rem;">アップロード済み画像はありません</div>';
+    body.innerHTML = `<div style="color:#888;text-align:center;padding:2rem;">${isPdf ? 'アップロード済みPDF' : 'アップロード済み画像'}はありません</div>`;
     return;
   }
   body.innerHTML = '<div id="imgPickerGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.7rem;"></div>';
@@ -941,21 +1014,22 @@ async function openImagePicker(idx, bce) {
   files.forEach(f => {
     const tile = document.createElement('div');
     tile.style.cssText = 'position:relative;border:1px solid #ddd;border-radius:4px;overflow:hidden;background:#fafafa;';
-    const kb = Math.round(f.size/1024);
     const dim = (f.width && f.height) ? `${f.width}×${f.height}` : '';
     tile.innerHTML = `
-      <img src="${f.url}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;">
+      ${isPdf
+        ? `<div class="pick" style="height:110px;display:flex;align-items:center;justify-content:center;font-size:2.5rem;cursor:pointer;">📄</div>`
+        : `<img class="pick" src="${f.url}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;">`}
       <div style="font-size:.7rem;color:#666;padding:.3rem .4rem;display:flex;justify-content:space-between;">
-        <span>${dim}</span><span>${kb}KB</span>
+        <span>${dim}</span><span>${fmtSize(f.size)}</span>
       </div>
       <button type="button" title="削除" style="position:absolute;top:.2rem;right:.2rem;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:99px;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">×</button>
     `;
-    tile.querySelector('img').onclick = () => {
-      setImageBlockSrc(idx, bce, f.url);
+    tile.querySelector('.pick').onclick = () => {
+      if (isPdf) setFileBlock(idx, bce, f); else setImageBlockSrc(idx, bce, f.url);
       overlay.style.display = 'none';
     };
     tile.querySelector('button').onclick = async () => {
-      if (!confirm('この画像を削除しますか？（記事から参照されていても削除されます）')) return;
+      if (!confirm((isPdf ? 'このPDF' : 'この画像') + 'を削除しますか？（記事から参照されていても削除されます）')) return;
       const res = await fetch(UPLOAD_API + '?filename=' + encodeURIComponent(f.filename), {
         method: 'DELETE', credentials: 'same-origin'
       });
@@ -980,6 +1054,7 @@ function addBlock(type) {
   if (type==='link_from') { block.target_genre=''; block.title=''; block.text=''; }
   if (type==='permalink') { block.slug=''; }
   if (type==='contact_form') { block.thanks=''; }
+  if (type==='file') { block.src=''; block.name=''; block.size=0; }
   state.editing.blocks.push(block);
   renderBlocksEditor();
   document.getElementById('blocksContainer')?.lastChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

@@ -58,7 +58,7 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 ID_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
 SLUG_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
 SESSION_RE = re.compile(r'^[a-f0-9]{64}$')
-UPLOAD_NAME_RE = re.compile(r'^[a-f0-9]{64}\.(jpg|png|gif|webp)$')
+UPLOAD_NAME_RE = re.compile(r'^[a-f0-9]{64}\.(jpg|png|gif|webp|pdf)$')
 TABLE_STYLES = ('plain', 'header-dark', 'striped', 'form', 'borderless')
 BOLD_COLOR_KEYS = ('bold_color', 'bold_bg_color', 'bold_ul_color')
 BOLD_KEYS = BOLD_COLOR_KEYS + ('bold_ul_thick',)
@@ -218,7 +218,7 @@ def list_articles(d, genre=None, show_hidden=False, full=False):
             if not full:
                 # ダイジェスト用に「見出し・クロスリンク・固定リンク以外の最初のブロック」を返す
                 prev = next((b for b in blocks
-                             if b.get('type') not in ('heading', 'link_from', 'permalink', 'contact_form')), None)
+                             if b.get('type') not in ('heading', 'link_from', 'permalink', 'contact_form', 'file')), None)
                 a['blocks'] = [prev] if prev else []
             out.append(a)
         # 他ジャンル記事の link_from ブロック(target_genre==genre)を擬似カードとして追加
@@ -277,6 +277,12 @@ def sanitize_block(b):
         if b.get('decoration') == 'phone-frame':
             o['decoration'] = 'phone-frame'
         return o
+    if t == 'file':
+        try:
+            size = max(0, int(b.get('size') or 0))
+        except (TypeError, ValueError):
+            size = 0
+        return {'type': 'file', 'src': s('src'), 'name': s('name'), 'size': size}
     if t == 'text':
         return _bold_attrs(b, {'type': 'text', 'content': s('content')})
     if t == 'permalink':
@@ -863,6 +869,16 @@ def image_info(path):
     except Exception:
         return None
 
+def pdf_info(path):
+    """PDF なら image_info と同じ形 (mime, 拡張子, 幅, 高さ) を返す。先頭の %PDF- で判定"""
+    try:
+        with open(path, 'rb') as f:
+            if f.read(5) == b'%PDF-':
+                return ('application/pdf', 'pdf', None, None)
+    except OSError:
+        pass
+    return None
+
 @app.route('/api/uploads', methods=['GET', 'POST', 'DELETE'])
 @app.route('/api/uploads.php', methods=['GET', 'POST', 'DELETE'])
 def api_uploads():
@@ -880,7 +896,7 @@ def api_uploads():
         for p in glob.glob(d + '*'):
             if not os.path.isfile(p):
                 continue
-            info = image_info(p)
+            info = image_info(p) or pdf_info(p)
             st = os.stat(p)
             files.append({'filename': os.path.basename(p), 'url': url + os.path.basename(p),
                           'size': st.st_size, 'mtime': int(st.st_mtime),
@@ -905,9 +921,9 @@ def api_uploads():
     try:
         if os.path.getsize(tmp) > MAX_UPLOAD_BYTES:
             return jsonify({'error': 'file too large'}), 400
-        info = image_info(tmp)
+        info = image_info(tmp) or pdf_info(tmp)
         if not info:
-            return jsonify({'error': 'unsupported image (jpeg/png/gif/webp のみ)'}), 400
+            return jsonify({'error': '対応していない形式です (jpeg/png/gif/webp/pdf のみ)'}), 400
         h = hashlib.sha256()
         with open(tmp, 'rb') as fh:
             for chunk in iter(lambda: fh.read(1 << 20), b''):
@@ -918,7 +934,7 @@ def api_uploads():
             os.replace(tmp, dst)
             os.chmod(dst, 0o644)
         return jsonify({'filename': name, 'url': url + name, 'width': info[2],
-                        'height': info[3], 'mime': info[0]}), 201
+                        'height': info[3], 'mime': info[0], 'size': os.path.getsize(dst)}), 201
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
