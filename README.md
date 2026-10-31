@@ -174,3 +174,8 @@ location /uploads/  { alias /path/to/uploads/; }
 
 - `https://...` の URL はそのままリンクになります。
 - `[表示文字](https://...)` と書くと、表示文字がリンクになります（http/https のみ）。
+
+## ヘッダーの電話番号
+
+`site.json` に `"header_tel": "0120-000-000"` を書くと、ヘッダーのサイト名の横に電話番号が表示されます（スマホでは押すと発信できる `tel:` リンク）。
+`"header_align": "right"` でサイト名と電話番号を右寄せにできます。

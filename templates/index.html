@@ -18,6 +18,10 @@ header {
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .03em; cursor: pointer; }
+header.align-right { justify-content: flex-end; }
+.brand { display: flex; align-items: center; flex-wrap: wrap; justify-content: inherit; gap: .2rem 1.2rem; }
+.header-tel { color: #fff; text-decoration: none; font-weight: 700; font-size: 1.05rem; letter-spacing: .04em; white-space: nowrap; }
+.header-tel:hover { color: #f0a500; }
 .logo .brand-accent { color: #f0a500; }
 .btn-sm {
   padding: .35rem .9rem; border-radius: 4px; font-size: .82rem;
@@ -31,8 +35,9 @@ header {
 .hero-tagline { font-size: 1.6rem; font-weight: 700; line-height: 1.55; letter-spacing: .02em; }
 .hero-tagline .brand-accent { color: #f0a500; }
 @media (max-width: 640px) {
-  header { padding: 0 1rem; }
+  header { padding: .45rem 1rem; height: auto; min-height: 60px; }
   .logo { font-size: .95rem; }
+  .header-tel { font-size: .95rem; }
   .hero { padding: 1.8rem 1rem 1.6rem; }
   .hero-tagline { font-size: 1.2rem; }
   nav.genre-nav { padding: 0 .5rem; }
@@ -151,8 +156,8 @@ footer { background: #1c3557; color: rgba(255,255,255,.6); text-align: center; f
 </head>
 <body>
 <div id="app">
-  <header>
-    <div class="logo" id="logoBtn">@@SITE_NAME_HTML@@</div>
+  <header class="@@HEADER_CLASS@@">
+    <div class="brand"><div class="logo" id="logoBtn">@@SITE_NAME_HTML@@</div>@@HEADER_TEL@@</div>
     <div id="headerActions"></div>
   </header>
 @@HERO@@  <nav class="genre-nav" id="genreNav"></nav>

@@ -480,6 +480,14 @@ def _hero_html(c):
             f'<h1 class="hero-tagline">{tag}</h1>'
             '</div></section>\n')
 
+def _header_tel_html(tel):
+    """ヘッダーの電話番号。tel: リンクは数字と + だけにする"""
+    tel = str(tel or '').strip()
+    digits = re.sub(r'[^0-9+]', '', tel)
+    if not digits:
+        return ''
+    return f'<a class="header-tel" href="tel:{digits}">&#9742; {_esc(tel)}</a>'
+
 def render_page(name, preview=False):
     c = cfg()
     with open(os.path.join(TEMPLATE_DIR, name), encoding='utf-8') as f:
@@ -491,6 +499,8 @@ def render_page(name, preview=False):
     site = _esc(c.get('site_name', ''))
     subs = {
         '@@SITE_NAME_HTML@@': c.get('site_name_html') or site,
+        '@@HEADER_TEL@@': _header_tel_html(c.get('header_tel')),
+        '@@HEADER_CLASS@@': 'align-right' if c.get('header_align') == 'right' else '',
         '@@SITE_NAME@@': site,
         '@@COPYRIGHT@@': _esc(c.get('copyright', '')),
         '@@ASSET_VER@@': ver,
