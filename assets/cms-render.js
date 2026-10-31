@@ -27,13 +27,20 @@ function mdInline(t, bs) {
   t = esc(t);
   const sa = bs ? ` style="${esc(bs)}"` : '';
   t = t.replace(/\*\*([^*\n]+?)\*\*/g, (m, g) => `<strong${sa}>${g}</strong>`);
+  // [表示文字](URL) 形式のリンク。裸URLの自動リンクと二重にならないよう一旦退避する
+  const links = [];
+  t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s<>"'()]+)\)/g, (m, label, url) => {
+    links.push(`<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    return `\u0000${links.length - 1}\u0000`;
+  });
   // http/https の裸URLを自動リンク化。行末の句読点や閉じ括弧は含めない
-  return t.replace(/https?:\/\/[^\s<>"'()（）、。]+/g, (m) => {
+  t = t.replace(/https?:\/\/[^\s<>"'()（）、。\u0000]+/g, (m) => {
     const trail = m.match(/[.,!?;:)]+$/);
     const url = trail ? m.slice(0, -trail[0].length) : m;
     const rest = trail ? trail[0] : '';
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${rest}`;
   });
+  return t.replace(/\u0000(\d+)\u0000/g, (m, i) => links[+i]);
 }
 function mdText(text, bs) {
   const lines = String(text || '').split('\n');
