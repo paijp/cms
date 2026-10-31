@@ -486,7 +486,7 @@ def _header_tel_html(tel):
     digits = re.sub(r'[^0-9+]', '', tel)
     if not digits:
         return ''
-    return f'<a class="header-tel" href="tel:{digits}">&#9742; {_esc(tel)}</a>'
+    return f'<a class="header-tel" href="tel:{digits}">{_esc(tel)}</a>'
 
 def render_page(name, preview=False):
     c = cfg()
