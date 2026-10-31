@@ -23,8 +23,6 @@ header {
   padding: .35rem .9rem; border-radius: 4px; font-size: .82rem;
   font-weight: 600; border: none; cursor: pointer; transition: background .15s;
 }
-.btn-back { background: rgba(255,255,255,.15); color: #fff; }
-.btn-back:hover { background: rgba(255,255,255,.25); }
 
 /* Preview banner (管理者ログイン中) */
 /* Hero (site.json の tagline を設定したときだけ表示) */
@@ -134,7 +132,9 @@ main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
 
 /* Detail */
 .article-detail { background: #fff; border-radius: 8px; border: 1px solid #dde2ea; padding: 2rem 2.5rem; }
-.detail-meta { font-size: .8rem; color: #888; margin-bottom: 1.5rem; }
+.detail-meta { font-size: .8rem; color: #888; margin-bottom: 1.5rem; display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .8rem; }
+.meta-back { padding: .25rem .75rem; border: 1px solid #cdd3da; border-radius: 99px; background: #fff; color: #1c3557; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.meta-back:hover { background: #f4f6f9; border-color: #1c3557; }
 
 /* Expanded list (ホーム) */
 .expanded-article { margin-bottom: 1.25rem; }
@@ -253,12 +253,12 @@ function renderGenreNav() {
 
 function renderHeader() {
   document.getElementById('logoBtn').onclick = () => { state.genre = GENRES[0].key; gotoList(); };
-  const el = document.getElementById('headerActions');
-  el.innerHTML = state.view === 'detail'
-    ? `<button class="btn-sm btn-back" id="btnBack">← 一覧へ</button>`
-    : '';
-  if (state.view === 'detail')
-    document.getElementById('btnBack').onclick = () => gotoList();
+  document.getElementById('headerActions').innerHTML = '';
+}
+
+/* 記事ページの日付行。左端に「一覧へ」を置く */
+function detailMetaHTML(genreLabel, a) {
+  return `<div class="detail-meta"><button type="button" class="meta-back" id="btnBack">← 一覧へ</button><span>${esc(genreLabel)} ・ 投稿日: ${fmtDate(a.created_at)} ・ 更新日: ${fmtDate(a.updated_at)}</span></div>`;
 }
 
 function renderMain() {
@@ -378,11 +378,12 @@ function renderLinkDetail(main) {
   const genreLabel = GENRES.find(g => g.key === state.genre)?.label || '';
   const linkText = d.src_title || (GENRES.find(g => g.key === d.src_genre)?.label || d.src_genre);
   main.innerHTML = `<div class="article-detail">
-    <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(d.created_at)} ・ 更新日: ${fmtDate(d.updated_at)}</div>
+    ${detailMetaHTML(genreLabel, d)}
     <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(d.title||'')}</h1>
     <div class="block block-text"><div class="md-body">${mdText(d.text||'', boldStyleOf(d))}</div></div>
     <p style="margin-top:1.5rem;font-size:.95rem;">詳しくは <a href="#" id="linkToSrc" style="color:#1c6fa8;font-weight:700;text-decoration:underline">${esc(linkText)}</a> をご覧下さい</p>
   </div>`;
+  document.getElementById('btnBack').onclick = () => gotoList();
   document.getElementById('linkToSrc').onclick = async (ev) => {
     ev.preventDefault();
     state.genre = d.src_genre;
@@ -406,9 +407,10 @@ function renderDetail(main) {
   if (!a) { main.innerHTML = '<div class="empty">記事が見つかりません。</div>'; return; }
   const genreLabel = GENRES.find(g => g.key === a.genre)?.label || '';
   main.innerHTML = `<div class="article-detail">
-    <div class="detail-meta">${esc(genreLabel)} ・ 投稿日: ${fmtDate(a.created_at)} ・ 更新日: ${fmtDate(a.updated_at)}</div>
+    ${detailMetaHTML(genreLabel, a)}
     <h1 style="font-size:1.5rem;font-weight:700;color:#1c3557;margin-bottom:1.25rem;">${esc(a.title||'')}</h1>
     <div id="blockOutput"></div></div>`;
+  document.getElementById('btnBack').onclick = () => gotoList();
   const out = document.getElementById('blockOutput');
   (a.blocks||[]).forEach(b => {
     // 元記事を開いたとき、クロスリンク/固定リンクブロックはこのページには表示しない
