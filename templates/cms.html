@@ -300,7 +300,10 @@ async function api(method, params = {}, body = null) {
   const url = qs ? `${API}?${qs}` : API;
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  return (await fetch(url, opts)).json();
+  const res = await fetch(url, opts);
+  // サーバ内部エラー(500)などで JSON 以外が返っても、画面側でエラーを表示できるようにする
+  try { return await res.json(); }
+  catch (_) { return { error: `サーバエラー (HTTP ${res.status})` }; }
 }
 function genId(genre) { return genre + '-' + Date.now(); }
 
@@ -491,6 +494,7 @@ async function openAccessLog() {
 }
 document.getElementById('btnModalPublish').onclick = async () => {
   const r = await api('POST', { publish: 1 });
+  if (r.error) { alert('公開できませんでした: ' + r.error + '\nしばらくしてもう一度お試しいただくか、管理者にご連絡ください。'); return; }
   document.getElementById('modalOverlay').classList.remove('show');
   showToast(`公開しました（更新 ${r.updated} 件 / 削除 ${r.removed} 件）`);
 };
